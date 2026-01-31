@@ -3,13 +3,62 @@ import seedrandom from "seedrandom";
 
 const PLAYER_SIZE = 20;
 const ENEMY_RADIUS = 10;
-const HIT_STOP_DURATION = 80;
+const ELITE_ENEMY_RADIUS = 18;
+const ELITE_MAX_HP = 3;
+const ELITE_SPEED_MULT = 0.7;
+const BASE_ENEMY_SPEED = 0.9;
+const SPEED_PER_STAGE = 0.07;
+const BURST_WAVE_DELAY = 600;
+const BURST_SPEED_MULT = 1.6;
+const BURST_DURATION = 260;
+const BURST_COOLDOWN_BASE = 2200;
+const BURST_COOLDOWN_VARIANCE = 1400;
+const COMBO_WINDOW_MS = 2000;
+const COMBO_THRESHOLDS = [1, 2, 3, 4, 6, 8];
+const COMBO_HIT_STOP_MS = [50, 65, 80, 95, 110, 130];
+const COMBO_SHAKE_MAGNITUDE = [2, 3, 4, 5, 6, 7];
+const COMBO_BADGE_SCALE = [1, 1.15, 1.3, 1.45, 1.65, 1.85];
+const COMBO_BADGE_COLOR = [
+  "#cfd3d6",
+  "#f0f2f4",
+  "#ffffff",
+  "#ffe08a",
+  "#ffb347",
+  "#ff6b4a",
+];
+const KILL_TEXT_SIZES = [14, 16, 18, 21, 24, 28];
+const KILL_TEXT_COLORS = [
+  "#d1d5db",
+  "#f3f4f6",
+  "#fff3bf",
+  "#ffd166",
+  "#ff9f1c",
+  "#ff5c5c",
+];
+const KILL_TEXT_POP_SCALE = [1.05, 1.08, 1.12, 1.18, 1.25, 1.32];
+const KILL_TEXT_RISE = [0.9, 1.0, 1.1, 1.2, 1.35, 1.5];
+const KILL_IMPACT_FLASH_DURATION = 160;
+const KILL_IMPACT_FLASH_ALPHA = 0.22;
+const BASE_HIT_STOP_MS = 80;
 const SCREEN_SHAKE_DURATION = 120;
-const SCREEN_SHAKE_MAGNITUDE = 6;
+const MASK_FLASH_DURATION = 220;
+const MASK_FLASH_ALPHA = 0.35;
+const ELITE_CONTACT_COOLDOWN = 650;
+const ELITE_KNOCKBACK_DISTANCE = 40;
+const PLAYER_INVULN_MS = 550;
+const NO_KILL_LIMIT_BASE = 4000;
+const NO_KILL_LIMIT_MIN = 2200;
+const NO_KILL_LIMIT_DECAY = 120;
+const NO_KILL_EXTRA_SPAWN_COUNT = 4;
+const NO_KILL_ESCALATE_THRESHOLD = 2;
+const WAVE_TRANSITION_DELAY = 900;
+const STAGE_TOAST_FADE_IN = 150;
+const STAGE_TOAST_HOLD = 350;
+const STAGE_TOAST_FADE_OUT = 300;
 const PLAYER_SPEED = 4;
-const DASH_DELAY = 1000;
+const MIN_DASH_DELAY = 100;
+const MAX_DASH_DELAY = 1100;
 const DASH_DURATION = 200;
-const MAX_KILLS_PER_DASH = 5;
 
 interface Point {
   x: number;
@@ -23,6 +72,19 @@ interface Entity extends Point {
 interface Enemy extends Entity {
   vx: number;
   vy: number;
+  radius: number;
+  hp: number;
+  maxHp: number;
+  type: "normal" | "elite";
+  spawned: boolean;
+  spawnAt: number;
+  flankSign: number;
+  speed: number;
+  nextBurstAt: number;
+  burstUntil: number;
+  lastHitDashId: number;
+  contactCooldownUntil: number;
+  waveId: number;
 }
 
 interface Particle extends Entity {
@@ -43,6 +105,11 @@ interface FloatingText extends Entity {
 interface KillText extends Entity {
   text: string;
   life: number;
+  size: number;
+  color: string;
+  popLife: number;
+  popScale: number;
+  rise: number;
 }
 
 interface TrailSegment {
@@ -60,13 +127,22 @@ interface DashState {
   pending: boolean;
   pendingStart: number;
   pendingTarget: Point;
+  pendingDelay: number;
   killsThisDash: number;
   hitStopUsed: boolean;
+  id: number;
 }
 
 interface Announcement {
   text: string;
   life: number;
+  scale: number;
+  color: string;
+}
+
+interface StageToast {
+  text: string;
+  startedAt: number;
 }
 
 interface GameState {
@@ -77,19 +153,31 @@ interface GameState {
   floatingTexts: FloatingText[];
   killTexts: KillText[];
   announcement: Announcement | null;
+  stageToast: StageToast | null;
   score: number;
   stage: number;
   enemiesInWave: number;
   enemiesKilledInWave: number;
   waveComplete: boolean;
+  waveStartAt: number;
+  currentWaveId: number;
+  lastKillAt: number;
+  noKillStrikes: number;
   isMasked: boolean;
   shatteredKills: number;
   gameOver: boolean;
   gameTime: number;
   shakeUntil: number;
   shakeMagnitude: number;
+  maskFlashUntil: number;
+  maskFlashColor: string;
+  impactFlashUntil: number;
+  impactFlashColor: string;
   rng: seedrandom.PRNG;
-  lastHitStop: number;
+  hitStopUntil: number;
+  comboCount: number;
+  comboUntil: number;
+  playerInvulnUntil: number;
   keys: { [key: string]: boolean };
   dash: DashState;
 }
@@ -100,14 +188,6 @@ interface GameCanvasProps {
   onGameOver: (score: number, stage: number) => void;
   onScoreUpdate: (score: number, isMasked: boolean, shatteredKills: number, stage: number) => void;
 }
-
-const KILL_ANNOUNCEMENTS = [
-  "First Blood",
-  "Double Kill",
-  "Triple Kill",
-  "Quadra Kill",
-  "Penta Kill",
-];
 
 function dist(p1: Point, p2: Point): number {
   return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
@@ -128,19 +208,67 @@ function lineIntersectCircle(A: Point, B: Point, C: Point, radius: number): bool
   return dist({ x: closestX, y: closestY }, C) <= radius;
 }
 
+function getComboLevel(comboCount: number): number {
+  let level = 0;
+  for (let i = 0; i < COMBO_THRESHOLDS.length; i++) {
+    if (comboCount >= COMBO_THRESHOLDS[i]) {
+      level = i;
+    } else {
+      break;
+    }
+  }
+  return level;
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
 export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
   const stateRef = useRef<GameState | null>(null);
 
   const spawnWave = useCallback((state: GameState, w: number, h: number) => {
-    const enemyCount = 3 + state.stage * 2;
-    state.enemiesInWave = enemyCount;
+    const rng = state.rng;
+    const now = Date.now();
+    const waveIndex = (state.stage - 1) % 5;
+    const waveId = state.stage;
+    const baseCount = Math.round(4 + state.stage * 1.2);
+    let normalCount = baseCount;
+    let eliteCount = 0;
+
+    if (waveIndex === 2) {
+      eliteCount = 1;
+    } else if (waveIndex === 3) {
+      normalCount = Math.round(baseCount * 1.4);
+    } else if (waveIndex === 4) {
+      eliteCount = Math.min(3, 1 + Math.floor(state.stage / 5));
+      normalCount = Math.max(2, Math.round(baseCount * 0.6));
+    }
+
+    const totalCount = normalCount + eliteCount;
+    state.enemiesInWave = totalCount;
     state.enemiesKilledInWave = 0;
     state.waveComplete = false;
 
-    for (let i = 0; i < enemyCount; i++) {
-      const rng = state.rng;
+    const baseSpeed = BASE_ENEMY_SPEED + state.stage * SPEED_PER_STAGE;
+
+    const spawnEnemy = (type: "normal" | "elite", delayMs: number) => {
       let x, y;
       if (rng() > 0.5) {
         x = rng() > 0.5 ? -20 : w + 20;
@@ -151,16 +279,46 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       }
 
       const angle = Math.atan2(h / 2 - y, w / 2 - x) + (rng() - 0.5) * 0.5;
-      const speed = state.stage === 1 ? 0 : 0.5 + state.stage * 0.3;
+      const speed = type === "elite" ? baseSpeed * ELITE_SPEED_MULT : baseSpeed;
+      const radius = type === "elite" ? ELITE_ENEMY_RADIUS : ENEMY_RADIUS;
+      const maxHp = type === "elite" ? ELITE_MAX_HP : 1;
+      const spawned = delayMs === 0;
+      const nextBurstBase = Math.max(900, BURST_COOLDOWN_BASE - state.stage * 60);
+      const nextBurstAt = now + nextBurstBase + rng() * BURST_COOLDOWN_VARIANCE;
 
       state.enemies.push({
         x,
         y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        active: true,
+        active: spawned,
+        radius,
+        hp: maxHp,
+        maxHp,
+        type,
+        spawned,
+        spawnAt: now + delayMs,
+        flankSign: rng() > 0.5 ? 1 : -1,
+        speed,
+        nextBurstAt,
+        burstUntil: 0,
+        lastHitDashId: -1,
+        contactCooldownUntil: 0,
+        waveId,
       });
+    };
+
+    const burstSplit = waveIndex === 3 ? Math.floor(normalCount / 2) : normalCount;
+    for (let i = 0; i < normalCount; i++) {
+      const delay = waveIndex === 3 && i >= burstSplit ? BURST_WAVE_DELAY : 0;
+      spawnEnemy("normal", delay);
     }
+    for (let i = 0; i < eliteCount; i++) {
+      spawnEnemy("elite", 0);
+    }
+
+    state.waveStartAt = now;
+    state.currentWaveId = waveId;
   }, []);
 
   const initGame = useCallback(() => {
@@ -178,19 +336,31 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       floatingTexts: [],
       killTexts: [],
       announcement: null,
+      stageToast: null,
       score: 0,
       stage: 1,
       enemiesInWave: 0,
       enemiesKilledInWave: 0,
       waveComplete: false,
+      waveStartAt: Date.now(),
+      currentWaveId: 1,
+      lastKillAt: Date.now(),
+      noKillStrikes: 0,
       isMasked: true,
       shatteredKills: 0,
       gameOver: false,
       gameTime: 0,
       shakeUntil: 0,
       shakeMagnitude: 0,
+      maskFlashUntil: 0,
+      maskFlashColor: "255, 255, 255",
+      impactFlashUntil: 0,
+      impactFlashColor: "255, 200, 140",
       rng,
-      lastHitStop: 0,
+      hitStopUntil: 0,
+      comboCount: 0,
+      comboUntil: 0,
+      playerInvulnUntil: 0,
       keys: {},
       dash: {
         active: false,
@@ -201,8 +371,10 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         pending: false,
         pendingStart: 0,
         pendingTarget: { x: 0, y: 0 },
+        pendingDelay: MIN_DASH_DELAY,
         killsThisDash: 0,
         hitStopUsed: false,
+        id: 0,
       },
     };
 
@@ -227,21 +399,55 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     }
   };
 
-  const spawnText = (text: string, color: string) => {
-    if (!stateRef.current) return;
-    stateRef.current.floatingTexts.push({
-      x: stateRef.current.player.x,
-      y: stateRef.current.player.y - 40,
-      text,
-      color,
-      life: 1.0,
-      vy: -2,
-      size: 48,
-      active: true,
-    });
+  const spawnPenaltyEnemies = (
+    state: GameState,
+    w: number,
+    h: number,
+    count: number
+  ) => {
+    const rng = state.rng;
+    const now = Date.now();
+    const baseSpeed = BASE_ENEMY_SPEED + state.stage * SPEED_PER_STAGE;
+    for (let i = 0; i < count; i++) {
+      let x, y;
+      if (rng() > 0.5) {
+        x = rng() > 0.5 ? -20 : w + 20;
+        y = rng() * h;
+      } else {
+        x = rng() * w;
+        y = rng() > 0.5 ? -20 : h + 20;
+      }
+
+      const angle = Math.atan2(h / 2 - y, w / 2 - x) + (rng() - 0.5) * 0.5;
+      const speed = baseSpeed;
+      const nextBurstBase = Math.max(900, BURST_COOLDOWN_BASE - state.stage * 60);
+      const nextBurstAt = now + nextBurstBase + rng() * BURST_COOLDOWN_VARIANCE;
+
+      state.enemies.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        active: true,
+        radius: ENEMY_RADIUS,
+        hp: 1,
+        maxHp: 1,
+        type: "normal",
+        spawned: true,
+        spawnAt: now,
+        flankSign: rng() > 0.5 ? 1 : -1,
+        speed,
+        nextBurstAt,
+        burstUntil: 0,
+        lastHitDashId: -1,
+        contactCooldownUntil: 0,
+        waveId: state.currentWaveId,
+      });
+    }
+    state.enemiesInWave += count;
   };
 
-  const spawnKillText = (x: number, y: number, killNumber: number) => {
+  const spawnKillText = (x: number, y: number, killNumber: number, comboLevel: number) => {
     if (!stateRef.current) return;
     const text = killNumber === 1 ? "1 kill" : `${killNumber} kills`;
     stateRef.current.killTexts.push({
@@ -249,18 +455,24 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       y,
       text,
       life: 1.0,
+      size: KILL_TEXT_SIZES[comboLevel],
+      color: KILL_TEXT_COLORS[comboLevel],
+      popLife: 1.0,
+      popScale: KILL_TEXT_POP_SCALE[comboLevel],
+      rise: KILL_TEXT_RISE[comboLevel],
       active: true,
     });
   };
 
-  const showAnnouncement = (killCount: number) => {
+  const showAnnouncement = (comboCount: number, comboLevel: number) => {
     if (!stateRef.current) return;
-    if (killCount >= 1 && killCount <= 5) {
-      stateRef.current.announcement = {
-        text: `${KILL_ANNOUNCEMENTS[killCount - 1]} (${stateRef.current.playerName})`,
-        life: 1.0,
-      };
-    }
+    const display = comboCount >= 8 ? "COMBO x8+" : `COMBO x${comboCount}`;
+    stateRef.current.announcement = {
+      text: display,
+      life: 1.0,
+      scale: COMBO_BADGE_SCALE[comboLevel],
+      color: COMBO_BADGE_COLOR[comboLevel],
+    };
   };
 
   useEffect(() => {
@@ -275,10 +487,17 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       const rect = canvas.getBoundingClientRect();
       const targetX = e.clientX - rect.left;
       const targetY = e.clientY - rect.top;
+      const dx = targetX - state.player.x;
+      const dy = targetY - state.player.y;
+      const distance = Math.hypot(dx, dy);
+      const maxDistance = Math.max(1, Math.hypot(canvas.width, canvas.height));
+      const ratio = Math.min(distance / maxDistance, 1);
+      const pendingDelay = MIN_DASH_DELAY + (MAX_DASH_DELAY - MIN_DASH_DELAY) * ratio;
 
       state.dash.pending = true;
       state.dash.pendingStart = Date.now();
       state.dash.pendingTarget = { x: targetX, y: targetY };
+      state.dash.pendingDelay = pendingDelay;
       state.dash.killsThisDash = 0;
     };
 
@@ -311,7 +530,8 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
 
       if (!state || !canvas) return;
 
-      if (Date.now() - state.lastHitStop < HIT_STOP_DURATION) {
+      const now = Date.now();
+      if (now < state.hitStopUntil) {
         draw(canvas, state);
         requestRef.current = requestAnimationFrame(update);
         return;
@@ -319,31 +539,96 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
 
       if (state.gameOver) {
         draw(canvas, state);
+        requestRef.current = requestAnimationFrame(update);
         return;
       }
 
       const width = canvas.width;
       const height = canvas.height;
 
-      // Check wave complete
-      if (!state.waveComplete) {
-        const allEnemiesOnScreen = state.enemies.every(
-          (e) => !e.active || (e.x >= 0 && e.x <= width && e.y >= 0 && e.y <= height)
-        );
-        const allEnemiesDead = state.enemies.every((e) => !e.active);
+      state.enemies.forEach((enemy) => {
+        if (!enemy.spawned && now >= enemy.spawnAt) {
+          enemy.spawned = true;
+          enemy.active = true;
+        }
+      });
 
-        if (allEnemiesOnScreen && allEnemiesDead && state.enemiesInWave > 0) {
+      // Check wave complete / no-kill pressure
+      if (!state.waveComplete) {
+        const currentWaveEnemies = state.enemies.filter(
+          (e) => e.waveId === state.currentWaveId
+        );
+        const allEnemiesOnScreen = currentWaveEnemies.every(
+          (e) =>
+            !e.spawned ||
+            !e.active ||
+            (e.x >= 0 && e.x <= width && e.y >= 0 && e.y <= height)
+        );
+        const allEnemiesDead = currentWaveEnemies.every(
+          (e) => !e.active && e.spawned
+        );
+        const spawnedWaveReady =
+          currentWaveEnemies.length > 0 &&
+          currentWaveEnemies.every((e) => e.spawned);
+        const noKillLimit = Math.max(
+          NO_KILL_LIMIT_MIN,
+          NO_KILL_LIMIT_BASE - state.stage * NO_KILL_LIMIT_DECAY
+        );
+        const noKillTimedOut =
+          spawnedWaveReady && now - state.lastKillAt >= noKillLimit;
+
+        if (allEnemiesOnScreen && allEnemiesDead && currentWaveEnemies.length > 0) {
           state.waveComplete = true;
           state.stage++;
-          spawnText(`STAGE ${state.stage}`, "#00ff00");
+          state.noKillStrikes = 0;
+          state.stageToast = {
+            text: `STAGE ${state.stage}`,
+            startedAt: now,
+          };
 
           setTimeout(() => {
             if (stateRef.current && !stateRef.current.gameOver) {
               spawnWave(stateRef.current, width, height);
             }
-          }, 2000);
+          }, WAVE_TRANSITION_DELAY);
 
           onScoreUpdate(state.score, state.isMasked, state.shatteredKills, state.stage);
+        } else if (noKillTimedOut) {
+          if (state.noKillStrikes + 1 < NO_KILL_ESCALATE_THRESHOLD) {
+            state.noKillStrikes += 1;
+            spawnPenaltyEnemies(state, width, height, NO_KILL_EXTRA_SPAWN_COUNT);
+            state.lastKillAt = now;
+          } else {
+            state.waveComplete = true;
+            state.stage++;
+            state.noKillStrikes = 0;
+            state.stageToast = {
+              text: `STAGE ${state.stage}`,
+              startedAt: now,
+            };
+            state.lastKillAt = now;
+
+            setTimeout(() => {
+              if (stateRef.current && !stateRef.current.gameOver) {
+                spawnWave(stateRef.current, width, height);
+              }
+            }, WAVE_TRANSITION_DELAY);
+
+            onScoreUpdate(
+              state.score,
+              state.isMasked,
+              state.shatteredKills,
+              state.stage
+            );
+          }
+        }
+      }
+
+      if (state.stageToast) {
+        const total =
+          STAGE_TOAST_FADE_IN + STAGE_TOAST_HOLD + STAGE_TOAST_FADE_OUT;
+        if (now - state.stageToast.startedAt > total) {
+          state.stageToast = null;
         }
       }
 
@@ -363,10 +648,10 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         state.player.y = Math.max(PLAYER_SIZE / 2, Math.min(height - PLAYER_SIZE / 2, state.player.y + moveY));
       }
 
-      // Pending Dash (1 second delay)
+      // Pending Dash (delay scales with distance)
       if (state.dash.pending && !state.dash.active) {
         const elapsed = Date.now() - state.dash.pendingStart;
-        if (elapsed >= DASH_DELAY) {
+        if (elapsed >= state.dash.pendingDelay) {
           state.dash.active = true;
           state.dash.pending = false;
           state.dash.startTime = Date.now();
@@ -375,6 +660,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
           state.dash.trail = [];
           state.dash.killsThisDash = 0;
           state.dash.hitStopUsed = false;
+          state.dash.id += 1;
         }
       }
 
@@ -394,39 +680,85 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
           life: 1.0,
         });
 
-        // Check collision during dash movement (max 5 kills)
-        let hitCount = 0;
+        // Check collision during dash movement
+        let killCount = 0;
         state.enemies.forEach((enemy) => {
           if (!enemy.active) return;
-          if (state.dash.killsThisDash >= MAX_KILLS_PER_DASH) return;
+          if (lineIntersectCircle(prevPos, state.player, enemy, enemy.radius + PLAYER_SIZE / 2)) {
+            if (enemy.lastHitDashId === state.dash.id) return;
+            enemy.lastHitDashId = state.dash.id;
+            enemy.hp -= 1;
 
-          if (lineIntersectCircle(prevPos, state.player, enemy, ENEMY_RADIUS + PLAYER_SIZE / 2)) {
-            enemy.active = false;
-            state.dash.killsThisDash++;
-            hitCount++;
-            state.score++;
-            state.enemiesKilledInWave++;
-            spawnParticles(enemy.x, enemy.y, "#ff0000", 15);
-            spawnKillText(enemy.x, enemy.y, state.dash.killsThisDash);
+            const hitColor = enemy.type === "elite" ? "#ff9933" : "#ff0000";
+            spawnParticles(enemy.x, enemy.y, hitColor, 10);
+
+            if (enemy.hp <= 0) {
+              enemy.active = false;
+              state.dash.killsThisDash++;
+              killCount++;
+              state.score++;
+              state.enemiesKilledInWave++;
+              state.lastKillAt = now;
+              state.noKillStrikes = 0;
+              spawnParticles(enemy.x, enemy.y, "#ff0000", 15);
+              const projectedCombo = Math.max(
+                state.comboCount + 1,
+                state.dash.killsThisDash
+              );
+              const textComboLevel = getComboLevel(projectedCombo);
+              spawnKillText(
+                enemy.x,
+                enemy.y,
+                state.dash.killsThisDash,
+                textComboLevel
+              );
+            }
           }
         });
 
-        if (hitCount > 0) {
+        if (killCount > 0) {
           skipCollisionThisFrame = true;
-          if (!state.dash.hitStopUsed) {
-            state.lastHitStop = Date.now();
-            state.dash.hitStopUsed = true;
-            state.shakeUntil = Date.now() + SCREEN_SHAKE_DURATION;
-            state.shakeMagnitude = SCREEN_SHAKE_MAGNITUDE;
+          if (now > state.comboUntil) {
+            state.comboCount = killCount;
+          } else {
+            state.comboCount += killCount;
           }
-          showAnnouncement(state.dash.killsThisDash);
+          state.comboUntil = now + COMBO_WINDOW_MS;
+
+          const comboLevel = getComboLevel(state.comboCount);
+          state.shakeUntil = now + SCREEN_SHAKE_DURATION;
+          state.shakeMagnitude = COMBO_SHAKE_MAGNITUDE[comboLevel];
+
+          if (comboLevel >= 3) {
+            state.impactFlashUntil = now + KILL_IMPACT_FLASH_DURATION;
+            state.impactFlashColor =
+              comboLevel >= 5 ? "255, 120, 90" : "255, 200, 140";
+            const extraCount = 6 + comboLevel * 4 + killCount * 2;
+            spawnParticles(
+              state.player.x,
+              state.player.y,
+              comboLevel >= 5 ? "#ff6b4a" : "#ffd166",
+              extraCount
+            );
+          }
+
+          if (!state.dash.hitStopUsed) {
+            state.hitStopUntil = Math.max(
+              state.hitStopUntil,
+              now + COMBO_HIT_STOP_MS[comboLevel]
+            );
+            state.dash.hitStopUsed = true;
+          }
+
+          showAnnouncement(state.comboCount, comboLevel);
 
           if (!state.isMasked) {
-            state.shatteredKills += hitCount;
+            state.shatteredKills += killCount;
             if (state.shatteredKills >= 3) {
               state.isMasked = true;
               state.shatteredKills = 0;
-              spawnText("MASK 面具重塑", "#ffffff");
+              state.maskFlashUntil = Date.now() + MASK_FLASH_DURATION;
+              state.maskFlashColor = "255, 255, 255";
               spawnParticles(state.player.x, state.player.y, "#ffffff", 20);
             }
           }
@@ -445,27 +777,74 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       state.dash.trail = state.dash.trail.filter((t) => t.life > 0);
 
       // Update Enemies
-      const disablePlayerCollision = state.dash.active || skipCollisionThisFrame;
+      const disablePlayerCollision =
+        state.dash.active || skipCollisionThisFrame || now < state.playerInvulnUntil;
       state.enemies.forEach((enemy) => {
-        if (!enemy.active) return;
+        if (!enemy.spawned || !enemy.active) return;
 
+        if (now >= enemy.nextBurstAt) {
+          enemy.burstUntil = now + BURST_DURATION;
+          const nextBurstBase = Math.max(800, BURST_COOLDOWN_BASE - state.stage * 50);
+          enemy.nextBurstAt = now + nextBurstBase + state.rng() * BURST_COOLDOWN_VARIANCE;
+        }
+
+        const chaseStrength = Math.min(0.06 + state.stage * 0.008, 0.22);
+        const lateralStrength = Math.min(0.02 + state.stage * 0.004, 0.08) * enemy.flankSign;
+        const burstMultiplier = now < enemy.burstUntil ? BURST_SPEED_MULT : 1;
         const angle = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
-        enemy.vx = enemy.vx * 0.98 + Math.cos(angle) * 0.1;
-        enemy.vy = enemy.vy * 0.98 + Math.sin(angle) * 0.1;
+        const targetSpeed = enemy.speed * burstMultiplier;
+        const targetVx =
+          Math.cos(angle) * targetSpeed +
+          Math.cos(angle + Math.PI / 2) * targetSpeed * lateralStrength;
+        const targetVy =
+          Math.sin(angle) * targetSpeed +
+          Math.sin(angle + Math.PI / 2) * targetSpeed * lateralStrength;
+
+        enemy.vx = enemy.vx * (1 - chaseStrength) + targetVx * chaseStrength;
+        enemy.vy = enemy.vy * (1 - chaseStrength) + targetVy * chaseStrength;
 
         enemy.x += enemy.vx;
         enemy.y += enemy.vy;
 
         if (disablePlayerCollision) return;
         const d = dist(state.player, enemy);
-        if (d < PLAYER_SIZE / 2 + ENEMY_RADIUS) {
+        if (d < PLAYER_SIZE / 2 + enemy.radius) {
+          if (enemy.type === "elite" && now < enemy.contactCooldownUntil) return;
           if (state.isMasked) {
             state.isMasked = false;
             state.shatteredKills = 0;
-            enemy.active = false;
+            state.maskFlashUntil = Date.now() + MASK_FLASH_DURATION;
+            state.maskFlashColor = "255, 80, 80";
+            if (enemy.type === "elite") {
+              state.playerInvulnUntil = now + PLAYER_INVULN_MS;
+              enemy.contactCooldownUntil = now + ELITE_CONTACT_COOLDOWN;
+              const dx = state.player.x - enemy.x;
+              const dy = state.player.y - enemy.y;
+              const len = Math.hypot(dx, dy) || 1;
+              const pushX = (dx / len) * ELITE_KNOCKBACK_DISTANCE;
+              const pushY = (dy / len) * ELITE_KNOCKBACK_DISTANCE;
+              state.player.x = Math.max(
+                PLAYER_SIZE / 2,
+                Math.min(width - PLAYER_SIZE / 2, state.player.x + pushX)
+              );
+              state.player.y = Math.max(
+                PLAYER_SIZE / 2,
+                Math.min(height - PLAYER_SIZE / 2, state.player.y + pushY)
+              );
+            }
+            if (enemy.hp > 1) {
+              enemy.hp -= 1;
+              spawnParticles(enemy.x, enemy.y, "#ff9933", 10);
+            } else {
+              enemy.active = false;
+              state.enemiesKilledInWave++;
+              state.score++;
+              state.lastKillAt = now;
+              state.noKillStrikes = 0;
+              spawnParticles(enemy.x, enemy.y, "#ff0000", 12);
+            }
             spawnParticles(state.player.x, state.player.y, "#ffffff", 15);
-            spawnText("MASK 面具碎裂", "#ff0000");
-            state.lastHitStop = Date.now();
+            state.hitStopUntil = Math.max(state.hitStopUntil, now + BASE_HIT_STOP_MS);
             onScoreUpdate(state.score, state.isMasked, state.shatteredKills, state.stage);
           } else {
             state.gameOver = true;
@@ -494,8 +873,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       // Update Kill Texts
       state.killTexts.forEach((t) => {
         if (!t.active) return;
-        t.y -= 1;
+        t.y -= t.rise;
         t.life -= 0.02;
+        t.popLife = Math.max(0, t.popLife - 0.08);
         if (t.life <= 0) t.active = false;
       });
 
@@ -510,7 +890,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       // Cleanup
       state.gameTime++;
       if (state.gameTime % 600 === 0) {
-        state.enemies = state.enemies.filter((e) => e.active);
+        state.enemies = state.enemies.filter((e) => e.active || !e.spawned);
         state.particles = state.particles.filter((p) => p.active);
         state.floatingTexts = state.floatingTexts.filter((t) => t.active);
         state.killTexts = state.killTexts.filter((t) => t.active);
@@ -559,7 +939,8 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     // Pending dash indicator
     if (state.dash.pending) {
       const elapsed = Date.now() - state.dash.pendingStart;
-      const progress = Math.min(elapsed / DASH_DELAY, 1);
+      const delay = Math.max(1, state.dash.pendingDelay);
+      const progress = Math.min(elapsed / delay, 1);
 
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 + progress * 0.5})`;
       ctx.lineWidth = 2;
@@ -577,7 +958,8 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       ctx.font = "14px 'Noto Sans SC', sans-serif";
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
-      ctx.fillText(`${((1 - progress) * 1).toFixed(1)}s`, state.dash.pendingTarget.x, state.dash.pendingTarget.y - 25);
+      const remain = Math.max(delay - elapsed, 0) / 1000;
+      ctx.fillText(`${remain.toFixed(1)}s`, state.dash.pendingTarget.x, state.dash.pendingTarget.y - 25);
     }
 
     // Particles
@@ -590,12 +972,17 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     ctx.globalAlpha = 1.0;
 
     // Enemies
-    ctx.fillStyle = "#ff0000";
     state.enemies.forEach((e) => {
       if (!e.active) return;
+      ctx.fillStyle = e.type === "elite" ? "#ff7a18" : "#ff0000";
       ctx.beginPath();
-      ctx.arc(e.x, e.y, ENEMY_RADIUS, 0, Math.PI * 2);
+      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
       ctx.fill();
+      if (e.type === "elite") {
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     });
 
     // Player
@@ -611,30 +998,138 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     }
 
     // Kill Texts on enemies
-    ctx.font = "bold 16px 'Noto Sans SC', sans-serif";
     ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     state.killTexts.forEach((t) => {
       if (!t.active) return;
+      const scale = 1 + t.popLife * (t.popScale - 1);
+      ctx.save();
+      ctx.translate(t.x, t.y);
+      ctx.scale(scale, scale);
       ctx.globalAlpha = t.life;
-      ctx.fillStyle = "#ffff00";
-      ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 3;
-      ctx.strokeText(t.text, t.x, t.y);
-      ctx.fillText(t.text, t.x, t.y);
+      ctx.font = `700 ${t.size}px 'Noto Sans SC', sans-serif`;
+      ctx.fillStyle = t.color;
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.strokeText(t.text, 0, 0);
+      ctx.fillText(t.text, 0, 0);
+      ctx.restore();
     });
     ctx.globalAlpha = 1.0;
 
-    // Announcement at top center
-    if (state.announcement && state.announcement.life > 0) {
-      ctx.globalAlpha = state.announcement.life;
-      ctx.font = "bold 36px 'Noto Sans SC', sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#ff4444";
-      ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 4;
-      ctx.strokeText(state.announcement.text, width / 2, 80);
-      ctx.fillText(state.announcement.text, width / 2, 80);
+    // Kill impact flash
+    if (state.impactFlashUntil > now) {
+      const remaining = Math.max(state.impactFlashUntil - now, 0);
+      const t = remaining / KILL_IMPACT_FLASH_DURATION;
+      const alpha = KILL_IMPACT_FLASH_ALPHA * t;
+      const gradient = ctx.createRadialGradient(
+        width / 2,
+        height / 2,
+        Math.min(width, height) * 0.15,
+        width / 2,
+        height / 2,
+        Math.max(width, height) * 0.6
+      );
+      gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+      gradient.addColorStop(1, `rgba(${state.impactFlashColor}, 1)`);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
       ctx.globalAlpha = 1.0;
+    }
+
+    // Mask flash vignette
+    if (state.maskFlashUntil > now) {
+      const remaining = Math.max(state.maskFlashUntil - now, 0);
+      const t = remaining / MASK_FLASH_DURATION;
+      const alpha = MASK_FLASH_ALPHA * t;
+      const gradient = ctx.createRadialGradient(
+        width / 2,
+        height / 2,
+        Math.min(width, height) * 0.2,
+        width / 2,
+        height / 2,
+        Math.max(width, height) * 0.7
+      );
+      gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+      gradient.addColorStop(1, `rgba(${state.maskFlashColor}, 1)`);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Kill announcement badge
+    if (state.announcement && state.announcement.life > 0) {
+      const life = Math.min(state.announcement.life, 1);
+      const progress = Math.min(1 - life, 1);
+      const enter = Math.min(progress * 4, 1);
+      const easeOut = 1 - Math.pow(1 - Math.min(progress, 1), 2);
+      const alpha = life * enter;
+      const text = state.announcement.text.toUpperCase();
+      const margin = 22;
+      const scale = state.announcement.scale;
+      const paddingX = 10 * scale;
+      const badgeHeight = 24 * scale;
+      const rise = easeOut * 8;
+      const slide = (1 - enter) * 12;
+
+      ctx.font = `600 ${14 * scale}px 'Noto Sans SC', sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      const textWidth = ctx.measureText(text).width;
+      const badgeWidth = textWidth + paddingX * 2;
+      const x = width - margin - badgeWidth + slide;
+      const y = margin + rise;
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+      ctx.lineWidth = 1;
+      drawRoundedRect(ctx, x, y, badgeWidth, badgeHeight, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = state.announcement.color;
+      ctx.fillText(text, x + paddingX, y + badgeHeight / 2);
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Stage toast (subtle center stamp)
+    if (state.stageToast) {
+      const elapsed = now - state.stageToast.startedAt;
+      const total =
+        STAGE_TOAST_FADE_IN + STAGE_TOAST_HOLD + STAGE_TOAST_FADE_OUT;
+      if (elapsed <= total) {
+        let alpha = 1;
+        if (elapsed < STAGE_TOAST_FADE_IN) {
+          alpha = elapsed / STAGE_TOAST_FADE_IN;
+        } else if (elapsed > STAGE_TOAST_FADE_IN + STAGE_TOAST_HOLD) {
+          alpha =
+            1 -
+            (elapsed - STAGE_TOAST_FADE_IN - STAGE_TOAST_HOLD) /
+              STAGE_TOAST_FADE_OUT;
+        }
+        const rise = Math.min(elapsed / total, 1) * 6;
+        ctx.globalAlpha = Math.max(alpha, 0);
+        ctx.font = "600 26px 'Noto Sans SC', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(230, 235, 240, 0.9)";
+        ctx.strokeStyle = "rgba(10, 10, 10, 0.35)";
+        ctx.lineWidth = 2;
+        ctx.strokeText(
+          state.stageToast.text,
+          width / 2,
+          height / 2 - rise
+        );
+        ctx.fillText(
+          state.stageToast.text,
+          width / 2,
+          height / 2 - rise
+        );
+        ctx.globalAlpha = 1.0;
+      }
     }
 
     // Floating Text (larger, more visible)
