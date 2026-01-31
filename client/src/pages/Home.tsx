@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GameCanvas } from "@/components/GameCanvas";
 import { GlitchText } from "@/components/GlitchText";
 import { useScores, useSubmitScore } from "@/hooks/use-scores";
@@ -6,54 +6,104 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sword, Shield, Skull, Trophy } from "lucide-react";
+import { Sword, Shield, Skull, Trophy, Target } from "lucide-react";
 
 type GamePhase = "MENU" | "PLAYING" | "GAMEOVER";
+
+interface LocalScore {
+  playerName: string;
+  stage: number;
+  score: number;
+  date: string;
+}
+
+const LOCAL_STORAGE_KEY = "mask_of_shadow_leaderboard";
+
+function getLocalLeaderboard(): LocalScore[] {
+  try {
+    const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (data) {
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error("Failed to load leaderboard", e);
+  }
+  return [];
+}
+
+function saveToLocalLeaderboard(entry: LocalScore) {
+  const leaderboard = getLocalLeaderboard();
+  leaderboard.push(entry);
+  leaderboard.sort((a, b) => b.stage - a.stage || b.score - a.score);
+  const top10 = leaderboard.slice(0, 10);
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(top10));
+}
 
 export default function Home() {
   const [phase, setPhase] = useState<GamePhase>("MENU");
   const [seed, setSeed] = useState("");
+  const [playerName, setPlayerName] = useState("");
   const [score, setScore] = useState(0);
+  const [stage, setStage] = useState(1);
   const [isMasked, setIsMasked] = useState(true);
   const [shatteredKills, setShatteredKills] = useState(0);
   const [finalScore, setFinalScore] = useState(0);
+  const [finalStage, setFinalStage] = useState(1);
+  const [localLeaderboard, setLocalLeaderboard] = useState<LocalScore[]>([]);
 
   const { data: scores } = useScores();
   const submitScore = useSubmitScore();
 
+  useEffect(() => {
+    setLocalLeaderboard(getLocalLeaderboard());
+  }, []);
+
   const handleStart = () => {
-    if (!seed.trim()) return;
+    if (!playerName.trim()) return;
+    const usedSeed = seed.trim() || playerName;
+    setSeed(usedSeed);
     setScore(0);
+    setStage(1);
     setIsMasked(true);
     setShatteredKills(0);
     setPhase("PLAYING");
   };
 
-  const handleGameOver = (final: number) => {
+  const handleGameOver = (final: number, stageReached: number) => {
     setFinalScore(final);
+    setFinalStage(stageReached);
     setPhase("GAMEOVER");
-    submitScore.mutate({ seed, score: final });
+    submitScore.mutate({ seed: seed || playerName, score: final });
+    
+    const entry: LocalScore = {
+      playerName,
+      stage: stageReached,
+      score: final,
+      date: new Date().toLocaleDateString(),
+    };
+    saveToLocalLeaderboard(entry);
+    setLocalLeaderboard(getLocalLeaderboard());
   };
 
-  const handleScoreUpdate = (newScore: number, masked: boolean, consecutive: number) => {
+  const handleScoreUpdate = (newScore: number, masked: boolean, consecutive: number, currentStage: number) => {
     setScore(newScore);
     setIsMasked(masked);
     setShatteredKills(consecutive);
+    setStage(currentStage);
   };
 
   return (
     <div className="relative w-screen h-screen bg-black overflow-hidden text-white font-sans selection:bg-red-900 selection:text-white">
       
-      {/* GAME LAYER */}
       {phase !== "MENU" && (
         <GameCanvas 
-          seed={seed} 
+          seed={seed || playerName} 
+          playerName={playerName}
           onGameOver={handleGameOver}
           onScoreUpdate={handleScoreUpdate}
         />
       )}
 
-      {/* HUD LAYER */}
       {phase === "PLAYING" && (
         <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none">
           <div className="flex flex-col gap-2">
@@ -62,6 +112,13 @@ export default function Home() {
             </h2>
             <div className="flex items-center gap-2 text-sm text-muted-foreground uppercase tracking-widest">
               <Sword className="w-4 h-4" /> 击杀数
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center">
+            <div className="flex items-center gap-2 text-xl font-bold">
+              <Target className="w-5 h-5" />
+              <span>STAGE {stage}</span>
             </div>
           </div>
 
@@ -85,7 +142,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* MENU / UI OVERLAY */}
       <AnimatePresence>
         {(phase === "MENU" || phase === "GAMEOVER") && (
           <motion.div 
@@ -94,7 +150,7 @@ export default function Home() {
             exit={{ opacity: 0 }}
             className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
           >
-            <div className="w-full max-w-md p-6">
+            <div className="w-full max-w-lg p-6">
               
               <div className="mb-12 text-center">
                 <h1 className="text-6xl font-display font-bold tracking-tighter mb-2">
@@ -110,38 +166,62 @@ export default function Home() {
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <label className="text-xs text-muted-foreground uppercase tracking-wider font-bold">
-                        潜行代号 (SEED)
+                        玩家名称
                       </label>
                       <Input 
                         autoFocus
-                        placeholder="输入任意字符..." 
+                        placeholder="输入你的名字..." 
+                        value={playerName}
+                        onChange={(e) => setPlayerName(e.target.value)}
+                        className="bg-black/50 border-zinc-700 text-white font-mono text-lg h-12 focus:border-white transition-colors"
+                        data-testid="input-player-name"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground uppercase tracking-wider font-bold">
+                        潜行代号 (SEED) - 可选
+                      </label>
+                      <Input 
+                        placeholder="留空使用玩家名称作为种子..." 
                         value={seed}
                         onChange={(e) => setSeed(e.target.value)}
                         className="bg-black/50 border-zinc-700 text-white font-mono text-lg h-12 focus:border-white transition-colors"
                         onKeyDown={(e) => e.key === "Enter" && handleStart()}
+                        data-testid="input-seed"
                       />
                     </div>
 
                     <Button 
                       onClick={handleStart}
-                      disabled={!seed}
+                      disabled={!playerName.trim()}
                       className="w-full h-14 text-lg font-bold bg-white text-black hover:bg-zinc-200 hover:scale-[1.02] transition-all duration-200"
+                      data-testid="button-start"
                     >
                       开始潜行
                     </Button>
 
                     <div className="mt-8 pt-6 border-t border-white/10">
                       <h3 className="flex items-center gap-2 text-sm font-bold text-muted-foreground mb-4">
-                        <Trophy className="w-4 h-4" /> 最近记录
+                        <Trophy className="w-4 h-4" /> 本地排行榜 (按局数排名)
                       </h3>
-                      <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                        {scores?.map((s, i) => (
-                          <div key={i} className="flex justify-between text-sm font-mono text-zinc-400">
-                            <span>#{s.seed}</span>
-                            <span className="text-white">{s.score}</span>
-                          </div>
-                        ))}
-                        {(!scores || scores.length === 0) && (
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                        {localLeaderboard.length > 0 ? (
+                          localLeaderboard.map((s, i) => (
+                            <div key={i} className="flex justify-between text-sm font-mono text-zinc-400 bg-zinc-900/50 p-2 rounded">
+                              <span className="flex items-center gap-2">
+                                <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${i === 0 ? 'bg-yellow-500 text-black' : i === 1 ? 'bg-zinc-400 text-black' : i === 2 ? 'bg-amber-700 text-white' : 'bg-zinc-700 text-zinc-300'}`}>
+                                  {i + 1}
+                                </span>
+                                <span className="text-white">{s.playerName}</span>
+                              </span>
+                              <span className="flex items-center gap-4">
+                                <span className="text-green-400">Stage {s.stage}</span>
+                                <span className="text-red-400">{s.score} kills</span>
+                              </span>
+                            </div>
+                          ))
+                        ) : (
                           <div className="text-xs text-zinc-600 italic">暂无记录</div>
                         )}
                       </div>
@@ -151,8 +231,37 @@ export default function Home() {
               ) : (
                 <Card className="bg-red-950/20 border-red-900/50 p-8 shadow-2xl backdrop-blur-md text-center">
                   <h2 className="text-3xl font-bold text-red-500 mb-2">任务失败</h2>
-                  <div className="text-6xl font-display font-bold text-white mb-8">
-                    {finalScore}
+                  <div className="flex justify-center gap-8 mb-6">
+                    <div>
+                      <div className="text-4xl font-display font-bold text-white">{finalStage}</div>
+                      <div className="text-sm text-zinc-400">Stage</div>
+                    </div>
+                    <div>
+                      <div className="text-4xl font-display font-bold text-white">{finalScore}</div>
+                      <div className="text-sm text-zinc-400">Kills</div>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-6 text-left">
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-muted-foreground mb-3">
+                      <Trophy className="w-4 h-4" /> 排行榜
+                    </h3>
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                      {localLeaderboard.map((s, i) => (
+                        <div key={i} className={`flex justify-between text-sm font-mono p-2 rounded ${s.playerName === playerName && s.stage === finalStage && s.score === finalScore ? 'bg-yellow-900/30 border border-yellow-500/50' : 'bg-zinc-900/50 text-zinc-400'}`}>
+                          <span className="flex items-center gap-2">
+                            <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${i === 0 ? 'bg-yellow-500 text-black' : i === 1 ? 'bg-zinc-400 text-black' : i === 2 ? 'bg-amber-700 text-white' : 'bg-zinc-700 text-zinc-300'}`}>
+                              {i + 1}
+                            </span>
+                            <span className="text-white">{s.playerName}</span>
+                          </span>
+                          <span className="flex items-center gap-4">
+                            <span className="text-green-400">Stage {s.stage}</span>
+                            <span className="text-red-400">{s.score} kills</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
@@ -160,12 +269,14 @@ export default function Home() {
                       variant="outline"
                       onClick={() => setPhase("MENU")}
                       className="h-12 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                      data-testid="button-menu"
                     >
                       返回主菜单
                     </Button>
                     <Button 
                       onClick={handleStart}
                       className="h-12 bg-red-600 hover:bg-red-700 text-white border-none"
+                      data-testid="button-retry"
                     >
                       再次尝试
                     </Button>
@@ -177,15 +288,14 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Tutorial Hint (Only Level 1/Initial) */}
-      {phase === "PLAYING" && score < 3 && (
+      {phase === "PLAYING" && score < 3 && stage === 1 && (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="absolute bottom-12 left-0 w-full text-center pointer-events-none"
         >
           <p className="text-zinc-400 text-sm tracking-widest bg-black/50 inline-block px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
-            点击鼠标瞬移 · 穿过敌人进行斩杀
+            WASD移动 · 点击鼠标蓄力冲刺 · 穿过敌人进行斩杀
           </p>
         </motion.div>
       )}

@@ -7,6 +7,7 @@ const HIT_STOP_DURATION = 1000;
 const PLAYER_SPEED = 4;
 const DASH_DELAY = 1000;
 const DASH_DURATION = 200;
+const MAX_KILLS_PER_DASH = 5;
 
 interface Point {
   x: number;
@@ -37,6 +38,11 @@ interface FloatingText extends Entity {
   size: number;
 }
 
+interface KillText extends Entity {
+  text: string;
+  life: number;
+}
+
 interface TrailSegment {
   x: number;
   y: number;
@@ -52,19 +58,31 @@ interface DashState {
   pending: boolean;
   pendingStart: number;
   pendingTarget: Point;
+  killsThisDash: number;
+}
+
+interface Announcement {
+  text: string;
+  life: number;
 }
 
 interface GameState {
   player: Point;
+  playerName: string;
   enemies: Enemy[];
   particles: Particle[];
   floatingTexts: FloatingText[];
+  killTexts: KillText[];
+  announcement: Announcement | null;
   score: number;
+  stage: number;
+  enemiesInWave: number;
+  enemiesKilledInWave: number;
+  waveComplete: boolean;
   isMasked: boolean;
   shatteredKills: number;
   gameOver: boolean;
   gameTime: number;
-  wave: number;
   rng: seedrandom.PRNG;
   lastHitStop: number;
   keys: { [key: string]: boolean };
@@ -73,9 +91,18 @@ interface GameState {
 
 interface GameCanvasProps {
   seed: string;
-  onGameOver: (score: number) => void;
-  onScoreUpdate: (score: number, isMasked: boolean, shatteredKills: number) => void;
+  playerName: string;
+  onGameOver: (score: number, stage: number) => void;
+  onScoreUpdate: (score: number, isMasked: boolean, shatteredKills: number, stage: number) => void;
 }
+
+const KILL_ANNOUNCEMENTS = [
+  "First Blood",
+  "Double Kill",
+  "Triple Kill",
+  "Quadra Kill",
+  "Penta Kill",
+];
 
 function dist(p1: Point, p2: Point): number {
   return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
@@ -96,10 +123,40 @@ function lineIntersectCircle(A: Point, B: Point, C: Point, radius: number): bool
   return dist({ x: closestX, y: closestY }, C) <= radius;
 }
 
-export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps) {
+export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
   const stateRef = useRef<GameState | null>(null);
+
+  const spawnWave = useCallback((state: GameState, w: number, h: number) => {
+    const enemyCount = 3 + state.stage * 2;
+    state.enemiesInWave = enemyCount;
+    state.enemiesKilledInWave = 0;
+    state.waveComplete = false;
+
+    for (let i = 0; i < enemyCount; i++) {
+      const rng = state.rng;
+      let x, y;
+      if (rng() > 0.5) {
+        x = rng() > 0.5 ? -20 : w + 20;
+        y = rng() * h;
+      } else {
+        x = rng() * w;
+        y = rng() > 0.5 ? -20 : h + 20;
+      }
+
+      const angle = Math.atan2(h / 2 - y, w / 2 - x) + (rng() - 0.5) * 0.5;
+      const speed = state.stage === 1 ? 0 : 0.5 + state.stage * 0.3;
+
+      state.enemies.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        active: true,
+      });
+    }
+  }, []);
 
   const initGame = useCallback(() => {
     if (!canvasRef.current) return;
@@ -108,17 +165,23 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
 
     const rng = seedrandom(seed);
 
-    stateRef.current = {
+    const state: GameState = {
       player: { x: width / 2, y: height / 2 },
+      playerName: playerName || "Player",
       enemies: [],
       particles: [],
       floatingTexts: [],
+      killTexts: [],
+      announcement: null,
       score: 0,
+      stage: 1,
+      enemiesInWave: 0,
+      enemiesKilledInWave: 0,
+      waveComplete: false,
       isMasked: true,
       shatteredKills: 0,
       gameOver: false,
       gameTime: 0,
-      wave: 0,
       rng,
       lastHitStop: 0,
       keys: {},
@@ -131,38 +194,13 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
         pending: false,
         pendingStart: 0,
         pendingTarget: { x: 0, y: 0 },
+        killsThisDash: 0,
       },
     };
 
-    for (let i = 0; i < 3; i++) {
-      spawnEnemy(width, height, true);
-    }
-  }, [seed]);
-
-  const spawnEnemy = (w: number, h: number, stationary = false) => {
-    if (!stateRef.current) return;
-    const rng = stateRef.current.rng;
-
-    let x, y;
-    if (rng() > 0.5) {
-      x = rng() > 0.5 ? -20 : w + 20;
-      y = rng() * h;
-    } else {
-      x = rng() * w;
-      y = rng() > 0.5 ? -20 : h + 20;
-    }
-
-    const angle = Math.atan2(h / 2 - y, w / 2 - x) + (rng() - 0.5) * 0.5;
-    const speed = stationary ? 0 : 1 + stateRef.current.score * 0.05;
-
-    stateRef.current.enemies.push({
-      x,
-      y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      active: true,
-    });
-  };
+    stateRef.current = state;
+    spawnWave(state, width, height);
+  }, [seed, playerName, spawnWave]);
 
   const spawnParticles = (x: number, y: number, color: string, count: number) => {
     if (!stateRef.current) return;
@@ -195,6 +233,28 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
     });
   };
 
+  const spawnKillText = (x: number, y: number, killNumber: number) => {
+    if (!stateRef.current) return;
+    const text = killNumber === 1 ? "1 kill" : `${killNumber} kills`;
+    stateRef.current.killTexts.push({
+      x,
+      y,
+      text,
+      life: 1.0,
+      active: true,
+    });
+  };
+
+  const showAnnouncement = (killCount: number) => {
+    if (!stateRef.current) return;
+    if (killCount >= 1 && killCount <= 5) {
+      stateRef.current.announcement = {
+        text: `${KILL_ANNOUNCEMENTS[killCount - 1]} (${stateRef.current.playerName})`,
+        life: 1.0,
+      };
+    }
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -211,6 +271,7 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
       state.dash.pending = true;
       state.dash.pendingStart = Date.now();
       state.dash.pendingTarget = { x: targetX, y: targetY };
+      state.dash.killsThisDash = 0;
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -256,6 +317,28 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
       const width = canvas.width;
       const height = canvas.height;
 
+      // Check wave complete
+      if (!state.waveComplete) {
+        const allEnemiesOnScreen = state.enemies.every(
+          (e) => !e.active || (e.x >= 0 && e.x <= width && e.y >= 0 && e.y <= height)
+        );
+        const allEnemiesDead = state.enemies.every((e) => !e.active);
+
+        if (allEnemiesOnScreen && allEnemiesDead && state.enemiesInWave > 0) {
+          state.waveComplete = true;
+          state.stage++;
+          spawnText(`STAGE ${state.stage}`, "#00ff00");
+
+          setTimeout(() => {
+            if (stateRef.current && !stateRef.current.gameOver) {
+              spawnWave(stateRef.current, width, height);
+            }
+          }, 2000);
+
+          onScoreUpdate(state.score, state.isMasked, state.shatteredKills, state.stage);
+        }
+      }
+
       // WASD Movement
       let moveX = 0;
       let moveY = 0;
@@ -282,6 +365,7 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
           state.dash.startPos = { ...state.player };
           state.dash.endPos = { ...state.dash.pendingTarget };
           state.dash.trail = [];
+          state.dash.killsThisDash = 0;
         }
       }
 
@@ -300,20 +384,27 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
           life: 1.0,
         });
 
-        // Check collision during dash movement
+        // Check collision during dash movement (max 5 kills)
         let hitCount = 0;
         state.enemies.forEach((enemy) => {
           if (!enemy.active) return;
+          if (state.dash.killsThisDash >= MAX_KILLS_PER_DASH) return;
+
           if (lineIntersectCircle(prevPos, state.player, enemy, ENEMY_RADIUS + PLAYER_SIZE / 2)) {
             enemy.active = false;
+            state.dash.killsThisDash++;
             hitCount++;
             state.score++;
+            state.enemiesKilledInWave++;
             spawnParticles(enemy.x, enemy.y, "#ff0000", 15);
+            spawnKillText(enemy.x, enemy.y, state.dash.killsThisDash);
           }
         });
 
         if (hitCount > 0) {
           state.lastHitStop = Date.now();
+          showAnnouncement(state.dash.killsThisDash);
+
           if (!state.isMasked) {
             state.shatteredKills += hitCount;
             if (state.shatteredKills >= 3) {
@@ -323,7 +414,7 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
               spawnParticles(state.player.x, state.player.y, "#ffffff", 20);
             }
           }
-          onScoreUpdate(state.score, state.isMasked, state.shatteredKills);
+          onScoreUpdate(state.score, state.isMasked, state.shatteredKills, state.stage);
         }
 
         if (progress >= 1) {
@@ -336,12 +427,6 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
         t.life -= 0.03;
       });
       state.dash.trail = state.dash.trail.filter((t) => t.life > 0);
-
-      // Spawner
-      state.gameTime++;
-      if (state.gameTime % 120 === 0) {
-        spawnEnemy(width, height);
-      }
 
       // Update Enemies
       state.enemies.forEach((enemy) => {
@@ -363,10 +448,10 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
             spawnParticles(state.player.x, state.player.y, "#ffffff", 15);
             spawnText("MASK 面具碎裂", "#ff0000");
             state.lastHitStop = Date.now();
-            onScoreUpdate(state.score, state.isMasked, state.shatteredKills);
+            onScoreUpdate(state.score, state.isMasked, state.shatteredKills, state.stage);
           } else {
             state.gameOver = true;
-            onGameOver(state.score);
+            onGameOver(state.score, state.stage);
           }
         }
       });
@@ -388,17 +473,35 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
         if (t.life <= 0) t.active = false;
       });
 
+      // Update Kill Texts
+      state.killTexts.forEach((t) => {
+        if (!t.active) return;
+        t.y -= 1;
+        t.life -= 0.02;
+        if (t.life <= 0) t.active = false;
+      });
+
+      // Update Announcement
+      if (state.announcement) {
+        state.announcement.life -= 0.01;
+        if (state.announcement.life <= 0) {
+          state.announcement = null;
+        }
+      }
+
       // Cleanup
+      state.gameTime++;
       if (state.gameTime % 600 === 0) {
         state.enemies = state.enemies.filter((e) => e.active);
         state.particles = state.particles.filter((p) => p.active);
         state.floatingTexts = state.floatingTexts.filter((t) => t.active);
+        state.killTexts = state.killTexts.filter((t) => t.active);
       }
 
       draw(canvas, state);
       requestRef.current = requestAnimationFrame(update);
     },
-    [onGameOver, onScoreUpdate]
+    [onGameOver, onScoreUpdate, spawnWave]
   );
 
   const draw = (canvas: HTMLCanvasElement, state: GameState) => {
@@ -430,7 +533,6 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
       const elapsed = Date.now() - state.dash.pendingStart;
       const progress = Math.min(elapsed / DASH_DELAY, 1);
 
-      // Draw line from player to target
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 + progress * 0.5})`;
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
@@ -440,12 +542,10 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Draw target circle
       ctx.beginPath();
       ctx.arc(state.dash.pendingTarget.x, state.dash.pendingTarget.y, 15 * progress, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Progress text
       ctx.font = "14px 'Noto Sans SC', sans-serif";
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
@@ -480,6 +580,33 @@ export function GameCanvas({ seed, onGameOver, onScoreUpdate }: GameCanvasProps)
     } else {
       ctx.lineWidth = 2;
       ctx.strokeRect(state.player.x - halfSize, state.player.y - halfSize, PLAYER_SIZE, PLAYER_SIZE);
+    }
+
+    // Kill Texts on enemies
+    ctx.font = "bold 16px 'Noto Sans SC', sans-serif";
+    ctx.textAlign = "center";
+    state.killTexts.forEach((t) => {
+      if (!t.active) return;
+      ctx.globalAlpha = t.life;
+      ctx.fillStyle = "#ffff00";
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 3;
+      ctx.strokeText(t.text, t.x, t.y);
+      ctx.fillText(t.text, t.x, t.y);
+    });
+    ctx.globalAlpha = 1.0;
+
+    // Announcement at top center
+    if (state.announcement && state.announcement.life > 0) {
+      ctx.globalAlpha = state.announcement.life;
+      ctx.font = "bold 36px 'Noto Sans SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ff4444";
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 4;
+      ctx.strokeText(state.announcement.text, width / 2, 80);
+      ctx.fillText(state.announcement.text, width / 2, 80);
+      ctx.globalAlpha = 1.0;
     }
 
     // Floating Text (larger, more visible)
