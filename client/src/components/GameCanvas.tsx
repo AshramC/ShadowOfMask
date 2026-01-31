@@ -3,7 +3,9 @@ import seedrandom from "seedrandom";
 
 const PLAYER_SIZE = 20;
 const ENEMY_RADIUS = 10;
-const HIT_STOP_DURATION = 1000;
+const HIT_STOP_DURATION = 80;
+const SCREEN_SHAKE_DURATION = 120;
+const SCREEN_SHAKE_MAGNITUDE = 6;
 const PLAYER_SPEED = 4;
 const DASH_DELAY = 1000;
 const DASH_DURATION = 200;
@@ -59,6 +61,7 @@ interface DashState {
   pendingStart: number;
   pendingTarget: Point;
   killsThisDash: number;
+  hitStopUsed: boolean;
 }
 
 interface Announcement {
@@ -83,6 +86,8 @@ interface GameState {
   shatteredKills: number;
   gameOver: boolean;
   gameTime: number;
+  shakeUntil: number;
+  shakeMagnitude: number;
   rng: seedrandom.PRNG;
   lastHitStop: number;
   keys: { [key: string]: boolean };
@@ -182,6 +187,8 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       shatteredKills: 0,
       gameOver: false,
       gameTime: 0,
+      shakeUntil: 0,
+      shakeMagnitude: 0,
       rng,
       lastHitStop: 0,
       keys: {},
@@ -195,6 +202,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         pendingStart: 0,
         pendingTarget: { x: 0, y: 0 },
         killsThisDash: 0,
+        hitStopUsed: false,
       },
     };
 
@@ -366,10 +374,12 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
           state.dash.endPos = { ...state.dash.pendingTarget };
           state.dash.trail = [];
           state.dash.killsThisDash = 0;
+          state.dash.hitStopUsed = false;
         }
       }
 
       // Active Dash with afterimages
+      let skipCollisionThisFrame = false;
       if (state.dash.active) {
         const elapsed = Date.now() - state.dash.startTime;
         const progress = Math.min(elapsed / DASH_DURATION, 1);
@@ -402,7 +412,13 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         });
 
         if (hitCount > 0) {
-          state.lastHitStop = Date.now();
+          skipCollisionThisFrame = true;
+          if (!state.dash.hitStopUsed) {
+            state.lastHitStop = Date.now();
+            state.dash.hitStopUsed = true;
+            state.shakeUntil = Date.now() + SCREEN_SHAKE_DURATION;
+            state.shakeMagnitude = SCREEN_SHAKE_MAGNITUDE;
+          }
           showAnnouncement(state.dash.killsThisDash);
 
           if (!state.isMasked) {
@@ -429,6 +445,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       state.dash.trail = state.dash.trail.filter((t) => t.life > 0);
 
       // Update Enemies
+      const disablePlayerCollision = state.dash.active || skipCollisionThisFrame;
       state.enemies.forEach((enemy) => {
         if (!enemy.active) return;
 
@@ -439,6 +456,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         enemy.x += enemy.vx;
         enemy.y += enemy.vy;
 
+        if (disablePlayerCollision) return;
         const d = dist(state.player, enemy);
         if (d < PLAYER_SIZE / 2 + ENEMY_RADIUS) {
           if (state.isMasked) {
@@ -509,6 +527,16 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     if (!ctx) return;
     const width = canvas.width;
     const height = canvas.height;
+
+    const now = Date.now();
+    if (state.shakeUntil > now) {
+      const progress = (state.shakeUntil - now) / SCREEN_SHAKE_DURATION;
+      const magnitude = state.shakeMagnitude * Math.max(progress, 0.1);
+      const offsetX = (Math.random() * 2 - 1) * magnitude;
+      const offsetY = (Math.random() * 2 - 1) * magnitude;
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+    }
 
     // Background
     if (state.isMasked) {
@@ -622,15 +650,11 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       ctx.fillText(t.text, t.x, t.y);
     });
     ctx.globalAlpha = 1.0;
-  };
 
-  useEffect(() => {
-    initGame();
-    requestRef.current = requestAnimationFrame(update);
-    return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    };
-  }, [initGame, update]);
+    if (state.shakeUntil > now) {
+      ctx.restore();
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -643,6 +667,17 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     handleResize();
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    initGame();
+  }, [initGame]);
+
+  useEffect(() => {
+    requestRef.current = requestAnimationFrame(update);
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, [update]);
 
   return (
     <canvas

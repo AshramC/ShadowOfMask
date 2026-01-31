@@ -1,9 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GameCanvas } from "@/components/GameCanvas";
 import { GlitchText } from "@/components/GlitchText";
-import { useScores, useSubmitScore } from "@/hooks/use-scores";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sword, Shield, Skull, Trophy, Target } from "lucide-react";
@@ -18,6 +16,7 @@ interface LocalScore {
 }
 
 const LOCAL_STORAGE_KEY = "mask_of_shadow_leaderboard";
+const DEFAULT_PLAYER_NAME = "无名刺客";
 
 function getLocalLeaderboard(): LocalScore[] {
   try {
@@ -41,8 +40,7 @@ function saveToLocalLeaderboard(entry: LocalScore) {
 
 export default function Home() {
   const [phase, setPhase] = useState<GamePhase>("MENU");
-  const [seed, setSeed] = useState("");
-  const [playerName, setPlayerName] = useState("");
+  const [seed, setSeed] = useState(() => Date.now().toString());
   const [score, setScore] = useState(0);
   const [stage, setStage] = useState(1);
   const [isMasked, setIsMasked] = useState(true);
@@ -50,18 +48,15 @@ export default function Home() {
   const [finalScore, setFinalScore] = useState(0);
   const [finalStage, setFinalStage] = useState(1);
   const [localLeaderboard, setLocalLeaderboard] = useState<LocalScore[]>([]);
-
-  const { data: scores } = useScores();
-  const submitScore = useSubmitScore();
+  const playerName = DEFAULT_PLAYER_NAME;
 
   useEffect(() => {
     setLocalLeaderboard(getLocalLeaderboard());
   }, []);
 
   const handleStart = () => {
-    if (!playerName.trim()) return;
-    const usedSeed = seed.trim() || playerName;
-    setSeed(usedSeed);
+    const nextSeed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setSeed(nextSeed);
     setScore(0);
     setStage(1);
     setIsMasked(true);
@@ -69,11 +64,10 @@ export default function Home() {
     setPhase("PLAYING");
   };
 
-  const handleGameOver = (final: number, stageReached: number) => {
+  const handleGameOver = useCallback((final: number, stageReached: number) => {
     setFinalScore(final);
     setFinalStage(stageReached);
     setPhase("GAMEOVER");
-    submitScore.mutate({ seed: seed || playerName, score: final });
     
     const entry: LocalScore = {
       playerName,
@@ -83,14 +77,17 @@ export default function Home() {
     };
     saveToLocalLeaderboard(entry);
     setLocalLeaderboard(getLocalLeaderboard());
-  };
+  }, [playerName]);
 
-  const handleScoreUpdate = (newScore: number, masked: boolean, consecutive: number, currentStage: number) => {
-    setScore(newScore);
-    setIsMasked(masked);
-    setShatteredKills(consecutive);
-    setStage(currentStage);
-  };
+  const handleScoreUpdate = useCallback(
+    (newScore: number, masked: boolean, consecutive: number, currentStage: number) => {
+      setScore(newScore);
+      setIsMasked(masked);
+      setShatteredKills(consecutive);
+      setStage(currentStage);
+    },
+    []
+  );
 
   return (
     <div className="relative w-screen h-screen bg-black overflow-hidden text-white font-sans selection:bg-red-900 selection:text-white">
@@ -164,37 +161,8 @@ export default function Home() {
               {phase === "MENU" ? (
                 <Card className="bg-zinc-900/50 border-zinc-800 p-8 shadow-2xl backdrop-blur-md">
                   <div className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-xs text-muted-foreground uppercase tracking-wider font-bold">
-                        玩家名称
-                      </label>
-                      <Input 
-                        autoFocus
-                        placeholder="输入你的名字..." 
-                        value={playerName}
-                        onChange={(e) => setPlayerName(e.target.value)}
-                        className="bg-black/50 border-zinc-700 text-white font-mono text-lg h-12 focus:border-white transition-colors"
-                        data-testid="input-player-name"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs text-muted-foreground uppercase tracking-wider font-bold">
-                        潜行代号 (SEED) - 可选
-                      </label>
-                      <Input 
-                        placeholder="留空使用玩家名称作为种子..." 
-                        value={seed}
-                        onChange={(e) => setSeed(e.target.value)}
-                        className="bg-black/50 border-zinc-700 text-white font-mono text-lg h-12 focus:border-white transition-colors"
-                        onKeyDown={(e) => e.key === "Enter" && handleStart()}
-                        data-testid="input-seed"
-                      />
-                    </div>
-
                     <Button 
                       onClick={handleStart}
-                      disabled={!playerName.trim()}
                       className="w-full h-14 text-lg font-bold bg-white text-black hover:bg-zinc-200 hover:scale-[1.02] transition-all duration-200"
                       data-testid="button-start"
                     >
