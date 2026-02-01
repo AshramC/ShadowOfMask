@@ -1,24 +1,58 @@
 import { useEffect, useRef, useCallback } from "react";
 import seedrandom from "seedrandom";
+import maskBgUrl from "../BG.png";
+import maskBrokenUrl from "../BG_BROKEN.png";
 
 const PLAYER_SIZE = 20;
 const ENEMY_RADIUS = 10;
 const ELITE_ENEMY_RADIUS = 18;
 const ASSASSIN_RADIUS = 8;
+const MINION_RADIUS = 7;
+const RIFT_RADIUS = 14;
+const SNARE_RADIUS = 12;
 const ELITE_MAX_HP = 3;
+const RIFT_MAX_HP = 2;
+const SNARE_MAX_HP = 2;
 const ELITE_SPEED_MULT = 0.7;
 const ASSASSIN_SPEED_MULT = 1.0;
+const MINION_SPEED_MULT = 0.9;
+const RIFT_SPEED_MULT = 0.6;
+const SNARE_SPEED_MULT = 0.8;
 const ASSASSIN_DASH_SPEED_MULT = 4.2;
 const ASSASSIN_WINDUP_MS = 160;
 const ASSASSIN_DASH_MS = 320;
 const ASSASSIN_RECOVER_MS = 360;
 const ASSASSIN_COOLDOWN_MS = 1100;
 const ASSASSIN_TRIGGER_RANGE = 320;
+const ASSASSIN_TELEPORT_COOLDOWN_MS = 2400;
+const ASSASSIN_TELEPORT_TRIGGER_DISTANCE = 420;
+const ASSASSIN_TELEPORT_MIN_RADIUS = 120;
+const ASSASSIN_TELEPORT_MAX_RADIUS = 200;
+const RIFT_CAST_COOLDOWN_MS = 2800;
+const RIFT_WARNING_MS = 420;
+const RIFT_DURATION_MS = 4200;
+const RIFT_SPAWN_INTERVAL_MS = 1000;
+const RIFT_SPAWN_MIN_RADIUS = 140;
+const RIFT_SPAWN_MAX_RADIUS = 240;
+const RIFT_MINION_BONUS_SPEED = 1.15;
+const SNARE_RANGE = 280;
+const SNARE_WINDUP_MS = 300;
+const SNARE_FIRE_MS = 140;
+const SNARE_RECOVER_MS = 700;
+const SNARE_COOLDOWN_MS = 1900;
+const SNARE_SLOW_MS = 800;
+const SNARE_SLOW_MULT = 0.6;
+const SNARE_DASH_DELAY_MULT = 1.35;
+const SNARE_CHAIN_WIDTH = 18;
 const ASSASSIN_ALPHA_STEALTH = 0.65;
 const ASSASSIN_ALPHA_ACTIVE = 1.0;
 const ASSASSIN_COLOR = "#c252ff";
 const ASSASSIN_GLOW = "rgba(194, 82, 255, 0.9)";
 const ASSASSIN_OUTLINE = "rgba(30, 10, 60, 0.75)";
+const RIFT_COLOR = "#4cc9ff";
+const RIFT_GLOW = "rgba(76, 201, 255, 0.8)";
+const SNARE_COLOR = "#28d4b5";
+const SNARE_GLOW = "rgba(40, 212, 181, 0.85)";
 const BASE_ENEMY_SPEED = 0.9;
 const SPEED_PER_STAGE = 0.07;
 const BURST_WAVE_DELAY = 600;
@@ -39,6 +73,11 @@ const COMBO_BADGE_COLOR = [
   "#ffb347",
   "#ff6b4a",
 ];
+const MARK_MAX = 6;
+const MARK_BG_ALPHA_MIN = 0.08;
+const MARK_BG_ALPHA_MAX = 0.28;
+const MARK_BG_TINT = "140, 20, 20";
+const MARK_BG_LINE_ALPHA = 0.12;
 const KILL_TEXT_SIZES = [14, 16, 18, 21, 24, 28];
 const KILL_TEXT_COLORS = [
   "#d1d5db",
@@ -106,13 +145,16 @@ interface Enemy extends Entity {
   radius: number;
   hp: number;
   maxHp: number;
-  type: "normal" | "elite" | "assassin";
+  type: "normal" | "elite" | "assassin" | "minion" | "rift" | "snare";
   spawned: boolean;
   spawnAt: number;
   flankSign: number;
   speed: number;
   nextBurstAt: number;
   burstUntil: number;
+  nextTeleportAt: number;
+  nextRiftAt: number;
+  lastAssassinAttackAt: number;
   lastHitDashId: number;
   contactCooldownUntil: number;
   waveId: number;
@@ -120,6 +162,10 @@ interface Enemy extends Entity {
   stateUntil: number;
   dashDx: number;
   dashDy: number;
+  snareState: "seek" | "windup" | "fire" | "recover";
+  snareUntil: number;
+  snareDirX: number;
+  snareDirY: number;
 }
 
 interface Particle extends Entity {
@@ -190,6 +236,7 @@ interface GameState {
   player: Point;
   playerName: string;
   enemies: Enemy[];
+  rifts: Rift[];
   particles: Particle[];
   floatingTexts: FloatingText[];
   killTexts: KillText[];
@@ -220,6 +267,9 @@ interface GameState {
   comboCount: number;
   comboUntil: number;
   playerInvulnUntil: number;
+  snareUntil: number;
+  markCount: number;
+  markIntensity: number;
   feverMeter: number;
   feverActive: boolean;
   feverUntil: number;
@@ -227,6 +277,12 @@ interface GameState {
   feverFlashType: "in" | "out" | null;
   keys: { [key: string]: boolean };
   dash: DashState;
+}
+
+interface Rift extends Entity {
+  openAt: number;
+  endAt: number;
+  nextSpawnAt: number;
 }
 
 interface GameCanvasProps {
@@ -260,6 +316,20 @@ function lineIntersectCircle(A: Point, B: Point, C: Point, radius: number): bool
   const closestY = A.y + t * dy;
 
   return dist({ x: closestX, y: closestY }, C) <= radius;
+}
+
+function distancePointToSegment(A: Point, B: Point, P: Point): number {
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return dist(A, P);
+
+  let t = ((P.x - A.x) * dx + (P.y - A.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+
+  const closestX = A.x + t * dx;
+  const closestY = A.y + t * dy;
+  return dist({ x: closestX, y: closestY }, P);
 }
 
 function getComboLevel(comboCount: number): number {
@@ -298,7 +368,9 @@ function drawMaskEmblem(
   cy: number,
   size: number,
   type: "break" | "restore",
-  alpha: number
+  alpha: number,
+  image?: HTMLImageElement | null,
+  brokenImage?: HTMLImageElement | null
 ) {
   const half = size / 2;
   const top = -half * 0.9;
@@ -311,41 +383,15 @@ function drawMaskEmblem(
     ctx.translate((Math.random() - 0.5) * jitter, (Math.random() - 0.5) * jitter);
   }
 
+  const stroke = type === "break" ? "rgba(255, 120, 90, 0.9)" : "rgba(230, 235, 240, 0.9)";
   ctx.globalAlpha = alpha;
-  ctx.strokeStyle = type === "break" ? "rgba(255, 120, 90, 0.9)" : "rgba(230, 235, 240, 0.9)";
-  ctx.lineWidth = 4;
-
-  ctx.beginPath();
-  ctx.moveTo(-half * 0.6, top);
-  ctx.quadraticCurveTo(0, top - half * 0.2, half * 0.6, top);
-  ctx.quadraticCurveTo(half * 0.85, 0, half * 0.55, bottom * 0.6);
-  ctx.lineTo(0, bottom);
-  ctx.lineTo(-half * 0.55, bottom * 0.6);
-  ctx.quadraticCurveTo(-half * 0.85, 0, -half * 0.6, top);
-  ctx.closePath();
-  ctx.stroke();
-
-  // Eye slits
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-half * 0.35, -half * 0.05);
-  ctx.lineTo(-half * 0.1, -half * 0.08);
-  ctx.moveTo(half * 0.35, -half * 0.05);
-  ctx.lineTo(half * 0.1, -half * 0.08);
-  ctx.stroke();
-
-  if (type === "break") {
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(255, 120, 90, 0.85)";
-    ctx.beginPath();
-    ctx.moveTo(-half * 0.1, top + half * 0.1);
-    ctx.lineTo(half * 0.1, bottom * 0.2);
-    ctx.moveTo(-half * 0.25, bottom * 0.1);
-    ctx.lineTo(half * 0.15, bottom * 0.5);
-    ctx.stroke();
+  if (type === "break" && brokenImage && brokenImage.complete) {
+    ctx.drawImage(brokenImage, -half, -half, size, size);
+  } else if (image && image.complete) {
+    ctx.drawImage(image, -half, -half, size, size);
   } else {
-    ctx.globalAlpha = alpha * 0.35;
-    ctx.fillStyle = "rgba(230, 235, 240, 0.6)";
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(-half * 0.6, top);
     ctx.quadraticCurveTo(0, top - half * 0.2, half * 0.6, top);
@@ -354,7 +400,7 @@ function drawMaskEmblem(
     ctx.lineTo(-half * 0.55, bottom * 0.6);
     ctx.quadraticCurveTo(-half * 0.85, 0, -half * 0.6, top);
     ctx.closePath();
-    ctx.fill();
+    ctx.stroke();
   }
 
   ctx.restore();
@@ -365,6 +411,8 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
   const stateRef = useRef<GameState | null>(null);
+  const bgImageRef = useRef<HTMLImageElement | null>(null);
+  const bgBrokenRef = useRef<HTMLImageElement | null>(null);
 
   const spawnWave = useCallback((state: GameState, w: number, h: number) => {
     const rng = state.rng;
@@ -375,6 +423,8 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     let normalCount = baseCount;
     let eliteCount = 0;
     let assassinCount = 0;
+    let riftCount = 0;
+    let snareCount = 0;
 
     if (waveIndex === 2) {
       eliteCount = 1;
@@ -392,14 +442,25 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       }
     }
 
-    const totalCount = normalCount + eliteCount + assassinCount;
+    if (state.stage >= 6) {
+      riftCount = Math.min(2, 1 + Math.floor((state.stage - 6) / 5));
+    }
+
+    if (state.stage >= 8) {
+      snareCount = Math.min(2, 1 + Math.floor((state.stage - 8) / 5));
+    }
+
+    const totalCount = normalCount + eliteCount + assassinCount + riftCount + snareCount;
     state.enemiesInWave = totalCount;
     state.enemiesKilledInWave = 0;
     state.waveComplete = false;
 
     const baseSpeed = BASE_ENEMY_SPEED + state.stage * SPEED_PER_STAGE;
 
-    const spawnEnemy = (type: "normal" | "elite" | "assassin", delayMs: number) => {
+    const spawnEnemy = (
+      type: "normal" | "elite" | "assassin" | "minion" | "rift" | "snare",
+      delayMs: number
+    ) => {
       let x, y;
       if (rng() > 0.5) {
         x = rng() > 0.5 ? -20 : w + 20;
@@ -415,17 +476,44 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
           ? baseSpeed * ELITE_SPEED_MULT
           : type === "assassin"
             ? baseSpeed * ASSASSIN_SPEED_MULT
+            : type === "minion"
+              ? baseSpeed * MINION_SPEED_MULT
+              : type === "rift"
+                ? baseSpeed * RIFT_SPEED_MULT
+                : type === "snare"
+                  ? baseSpeed * SNARE_SPEED_MULT
             : baseSpeed;
       const radius =
         type === "elite"
           ? ELITE_ENEMY_RADIUS
           : type === "assassin"
             ? ASSASSIN_RADIUS
+            : type === "minion"
+              ? MINION_RADIUS
+              : type === "rift"
+                ? RIFT_RADIUS
+                : type === "snare"
+                  ? SNARE_RADIUS
             : ENEMY_RADIUS;
-      const maxHp = type === "elite" ? ELITE_MAX_HP : 1;
+      const maxHp =
+        type === "elite"
+          ? ELITE_MAX_HP
+          : type === "rift"
+            ? RIFT_MAX_HP
+            : type === "snare"
+              ? SNARE_MAX_HP
+            : 1;
       const spawned = delayMs === 0;
       const nextBurstBase = Math.max(900, BURST_COOLDOWN_BASE - state.stage * 60);
       const nextBurstAt = now + nextBurstBase + rng() * BURST_COOLDOWN_VARIANCE;
+      const nextTeleportAt =
+        now +
+        ASSASSIN_TELEPORT_COOLDOWN_MS *
+          (0.7 + rng() * 0.6);
+      const nextRiftAt =
+        now +
+        RIFT_CAST_COOLDOWN_MS *
+          (0.7 + rng() * 0.6);
 
       state.enemies.push({
         x,
@@ -443,6 +531,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         speed,
         nextBurstAt,
         burstUntil: 0,
+        nextTeleportAt,
+        nextRiftAt,
+        lastAssassinAttackAt: 0,
         lastHitDashId: -1,
         contactCooldownUntil: 0,
         waveId,
@@ -450,6 +541,10 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         stateUntil: now + rng() * 400,
         dashDx: 0,
         dashDy: 0,
+        snareState: "seek",
+        snareUntil: now + rng() * 500,
+        snareDirX: 0,
+        snareDirY: 0,
       });
     };
 
@@ -463,6 +558,12 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     }
     for (let i = 0; i < assassinCount; i++) {
       spawnEnemy("assassin", 0);
+    }
+    for (let i = 0; i < riftCount; i++) {
+      spawnEnemy("rift", 0);
+    }
+    for (let i = 0; i < snareCount; i++) {
+      spawnEnemy("snare", 0);
     }
 
     state.waveStartAt = now;
@@ -480,6 +581,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       player: { x: width / 2, y: height / 2 },
       playerName: playerName || "Player",
       enemies: [],
+      rifts: [],
       particles: [],
       floatingTexts: [],
       killTexts: [],
@@ -510,6 +612,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       comboCount: 0,
       comboUntil: 0,
       playerInvulnUntil: 0,
+      snareUntil: 0,
+      markCount: 0,
+      markIntensity: 0,
       feverMeter: 0,
       feverActive: false,
       feverUntil: 0,
@@ -553,6 +658,70 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     }
   };
 
+  const spawnMinion = (state: GameState, x: number, y: number) => {
+    const now = Date.now();
+    const baseSpeed = BASE_ENEMY_SPEED + state.stage * SPEED_PER_STAGE;
+    const speed = baseSpeed * MINION_SPEED_MULT * RIFT_MINION_BONUS_SPEED;
+    const angle =
+      Math.atan2(state.player.y - y, state.player.x - x) + (state.rng() - 0.5) * 0.5;
+    const nextBurstBase = Math.max(900, BURST_COOLDOWN_BASE - state.stage * 60);
+    const nextBurstAt = now + nextBurstBase + state.rng() * BURST_COOLDOWN_VARIANCE;
+
+    state.enemies.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      active: true,
+      radius: MINION_RADIUS,
+      hp: 1,
+      maxHp: 1,
+      type: "minion",
+      spawned: true,
+      spawnAt: now,
+      flankSign: state.rng() > 0.5 ? 1 : -1,
+      speed,
+      nextBurstAt,
+      burstUntil: 0,
+      nextTeleportAt: now + ASSASSIN_TELEPORT_COOLDOWN_MS,
+      nextRiftAt: now + RIFT_CAST_COOLDOWN_MS,
+      lastAssassinAttackAt: 0,
+      lastHitDashId: -1,
+      contactCooldownUntil: 0,
+      waveId: state.currentWaveId,
+      assassinState: "approach",
+      stateUntil: now + state.rng() * 400,
+      dashDx: 0,
+      dashDy: 0,
+      snareState: "seek",
+      snareUntil: now + state.rng() * 500,
+      snareDirX: 0,
+      snareDirY: 0,
+    });
+    state.enemiesInWave += 1;
+  };
+
+  const spawnRift = (state: GameState, w: number, h: number) => {
+    const now = Date.now();
+    const angle = state.rng() * Math.PI * 2;
+    const radius =
+      RIFT_SPAWN_MIN_RADIUS +
+      state.rng() * (RIFT_SPAWN_MAX_RADIUS - RIFT_SPAWN_MIN_RADIUS);
+    const targetX = state.player.x + Math.cos(angle) * radius;
+    const targetY = state.player.y + Math.sin(angle) * radius;
+    const x = Math.max(RIFT_RADIUS, Math.min(w - RIFT_RADIUS, targetX));
+    const y = Math.max(RIFT_RADIUS, Math.min(h - RIFT_RADIUS, targetY));
+
+    state.rifts.push({
+      x,
+      y,
+      active: true,
+      openAt: now + RIFT_WARNING_MS,
+      endAt: now + RIFT_WARNING_MS + RIFT_DURATION_MS,
+      nextSpawnAt: now + RIFT_WARNING_MS,
+    });
+  };
+
   const spawnPenaltyEnemies = (
     state: GameState,
     w: number,
@@ -593,6 +762,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         speed,
         nextBurstAt,
         burstUntil: 0,
+        nextTeleportAt: now + ASSASSIN_TELEPORT_COOLDOWN_MS,
+        nextRiftAt: now + RIFT_CAST_COOLDOWN_MS,
+        lastAssassinAttackAt: 0,
         lastHitDashId: -1,
         contactCooldownUntil: 0,
         waveId: state.currentWaveId,
@@ -600,6 +772,10 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         stateUntil: now + rng() * 400,
         dashDx: 0,
         dashDy: 0,
+        snareState: "seek",
+        snareUntil: now + rng() * 500,
+        snareDirX: 0,
+        snareDirY: 0,
       });
     }
     state.enemiesInWave += count;
@@ -622,9 +798,12 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     });
   };
 
-  const showAnnouncement = (comboCount: number, comboLevel: number) => {
+  const showAnnouncement = (comboCount: number, comboLevel: number, markCount: number) => {
     if (!stateRef.current) return;
-    const display = comboCount >= 8 ? "COMBO x8+" : `COMBO x${comboCount}`;
+    const comboText = comboCount >= 8 ? "COMBO x8+" : `COMBO x${comboCount}`;
+    const markText =
+      markCount >= MARK_MAX ? "MARK MAX" : markCount > 0 ? `MARK ${markCount}` : "";
+    const display = markText ? `${comboText} | ${markText}` : comboText;
     stateRef.current.announcement = {
       text: display,
       life: 1.0,
@@ -632,6 +811,16 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       color: COMBO_BADGE_COLOR[comboLevel],
     };
   };
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = maskBgUrl;
+    bgImageRef.current = img;
+
+    const broken = new Image();
+    broken.src = maskBrokenUrl;
+    bgBrokenRef.current = broken;
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -651,7 +840,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       const maxDistance = Math.max(1, Math.hypot(canvas.width, canvas.height));
       const ratio = Math.min(distance / maxDistance, 1);
       const baseDelay = MIN_DASH_DELAY + (MAX_DASH_DELAY - MIN_DASH_DELAY) * ratio;
-      const pendingDelay = baseDelay * (state.feverActive ? FEVER_DASH_DELAY_MULT : 1);
+      const snareMult = Date.now() < state.snareUntil ? SNARE_DASH_DELAY_MULT : 1;
+      const pendingDelay =
+        baseDelay * (state.feverActive ? FEVER_DASH_DELAY_MULT : 1) * snareMult;
 
       state.dash.pending = true;
       state.dash.pendingStart = Date.now();
@@ -720,6 +911,15 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
 
       const width = canvas.width;
       const height = canvas.height;
+
+      if (now > state.comboUntil) {
+        state.comboCount = 0;
+        state.markCount = 0;
+      }
+      const markTarget = Math.min(state.markCount / MARK_MAX, 1);
+      const markLerp = markTarget > state.markIntensity ? 0.12 : 0.2;
+      state.markIntensity += (markTarget - state.markIntensity) * markLerp;
+      if (state.markIntensity < 0.002) state.markIntensity = 0;
 
       state.enemies.forEach((enemy) => {
         if (!enemy.spawned && now >= enemy.spawnAt) {
@@ -836,7 +1036,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
 
       if (moveX !== 0 || moveY !== 0) {
         const len = Math.sqrt(moveX * moveX + moveY * moveY);
-        const speed = PLAYER_SPEED * (state.feverActive ? FEVER_SPEED_MULT : 1);
+        const snareMult = now < state.snareUntil ? SNARE_SLOW_MULT : 1;
+        const speed =
+          PLAYER_SPEED * (state.feverActive ? FEVER_SPEED_MULT : 1) * snareMult;
         moveX = (moveX / len) * speed;
         moveY = (moveY / len) * speed;
         state.player.x = Math.max(PLAYER_SIZE / 2, Math.min(width - PLAYER_SIZE / 2, state.player.x + moveX));
@@ -885,7 +1087,18 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
             enemy.lastHitDashId = state.dash.id;
             enemy.hp -= 1;
 
-            const hitColor = enemy.type === "elite" ? "#ff9933" : "#ff0000";
+            const hitColor =
+              enemy.type === "elite"
+                ? "#ff9933"
+                : enemy.type === "assassin"
+                  ? ASSASSIN_COLOR
+                  : enemy.type === "rift"
+                    ? RIFT_COLOR
+                    : enemy.type === "snare"
+                      ? SNARE_COLOR
+                      : enemy.type === "minion"
+                        ? "#ff5c5c"
+                        : "#ff0000";
             spawnParticles(enemy.x, enemy.y, hitColor, 10);
 
             if (enemy.hp <= 0) {
@@ -921,6 +1134,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
             state.comboCount += killCount;
           }
           state.comboUntil = now + COMBO_WINDOW_MS;
+          state.markCount = Math.min(MARK_MAX, state.markCount + killCount);
 
           const comboLevel = getComboLevel(state.comboCount);
           state.shakeUntil = now + SCREEN_SHAKE_DURATION;
@@ -962,7 +1176,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
             state.dash.hitStopUsed = true;
           }
 
-          showAnnouncement(state.comboCount, comboLevel);
+          showAnnouncement(state.comboCount, comboLevel, state.markCount);
 
           if (!state.isMasked) {
             state.shatteredKills += killCount;
@@ -1000,6 +1214,20 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       });
       state.dash.trail = state.dash.trail.filter((t) => t.life > 0);
 
+      // Update Rifts
+      state.rifts.forEach((rift) => {
+        if (!rift.active) return;
+        if (now >= rift.endAt) {
+          rift.active = false;
+          return;
+        }
+        if (now >= rift.openAt && now >= rift.nextSpawnAt) {
+          spawnMinion(state, rift.x, rift.y);
+          rift.nextSpawnAt = now + RIFT_SPAWN_INTERVAL_MS;
+        }
+      });
+      state.rifts = state.rifts.filter((r) => r.active);
+
       // Update Enemies
       const disablePlayerCollision =
         state.dash.active || skipCollisionThisFrame || now < state.playerInvulnUntil;
@@ -1013,6 +1241,12 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
           const baseAngle = Math.atan2(toPlayerY, toPlayerX);
           const chaseStrength = 0.08;
           const lateralStrength = 0.04 * enemy.flankSign;
+          const shouldTeleport =
+            enemy.assassinState === "recover" &&
+            now >= enemy.stateUntil &&
+            enemy.lastAssassinAttackAt > 0 &&
+            now >= enemy.nextTeleportAt &&
+            distance > ASSASSIN_TELEPORT_TRIGGER_DISTANCE;
 
           if (enemy.assassinState === "approach") {
             const targetSpeed = enemy.speed;
@@ -1048,25 +1282,142 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
             if (now >= enemy.stateUntil) {
               enemy.assassinState = "recover";
               enemy.stateUntil = now + ASSASSIN_RECOVER_MS;
+              enemy.lastAssassinAttackAt = now;
             }
           } else {
             enemy.vx *= 0.85;
             enemy.vy *= 0.85;
             if (now >= enemy.stateUntil) {
-              enemy.assassinState = "approach";
-              enemy.stateUntil = now + ASSASSIN_COOLDOWN_MS;
+              if (shouldTeleport) {
+                const teleportAngle = state.rng() * Math.PI * 2;
+                const teleportRadius =
+                  ASSASSIN_TELEPORT_MIN_RADIUS +
+                  state.rng() * (ASSASSIN_TELEPORT_MAX_RADIUS - ASSASSIN_TELEPORT_MIN_RADIUS);
+                const targetX =
+                  state.player.x + Math.cos(teleportAngle) * teleportRadius;
+                const targetY =
+                  state.player.y + Math.sin(teleportAngle) * teleportRadius;
+                enemy.x = Math.max(enemy.radius, Math.min(width - enemy.radius, targetX));
+                enemy.y = Math.max(enemy.radius, Math.min(height - enemy.radius, targetY));
+                enemy.vx = 0;
+                enemy.vy = 0;
+                const dx = state.player.x - enemy.x;
+                const dy = state.player.y - enemy.y;
+                const len = Math.hypot(dx, dy) || 1;
+                enemy.dashDx = dx / len;
+                enemy.dashDy = dy / len;
+                enemy.assassinState = "windup";
+                enemy.stateUntil = now + ASSASSIN_WINDUP_MS;
+                enemy.nextTeleportAt = now + ASSASSIN_TELEPORT_COOLDOWN_MS;
+              } else {
+                enemy.assassinState = "approach";
+                enemy.stateUntil = now + ASSASSIN_COOLDOWN_MS;
+              }
             }
           }
+        } else if (enemy.type === "snare") {
+          const toPlayerX = state.player.x - enemy.x;
+          const toPlayerY = state.player.y - enemy.y;
+          const distance = Math.hypot(toPlayerX, toPlayerY);
+          const baseAngle = Math.atan2(toPlayerY, toPlayerX);
+          const chaseStrength = 0.07;
+          const lateralStrength = 0.03 * enemy.flankSign;
+
+          if (enemy.snareState === "seek") {
+            const targetSpeed = enemy.speed;
+            const targetVx =
+              Math.cos(baseAngle) * targetSpeed +
+              Math.cos(baseAngle + Math.PI / 2) * targetSpeed * lateralStrength;
+            const targetVy =
+              Math.sin(baseAngle) * targetSpeed +
+              Math.sin(baseAngle + Math.PI / 2) * targetSpeed * lateralStrength;
+            enemy.vx = enemy.vx * (1 - chaseStrength) + targetVx * chaseStrength;
+            enemy.vy = enemy.vy * (1 - chaseStrength) + targetVy * chaseStrength;
+
+            if (distance < SNARE_RANGE && now >= enemy.snareUntil) {
+              enemy.snareState = "windup";
+              enemy.snareUntil = now + SNARE_WINDUP_MS;
+              const len = distance || 1;
+              enemy.snareDirX = toPlayerX / len;
+              enemy.snareDirY = toPlayerY / len;
+            }
+          } else if (enemy.snareState === "windup") {
+            enemy.vx *= 0.5;
+            enemy.vy *= 0.5;
+            if (now >= enemy.snareUntil) {
+              const chainEnd = {
+                x: enemy.x + enemy.snareDirX * SNARE_RANGE,
+                y: enemy.y + enemy.snareDirY * SNARE_RANGE,
+              };
+              const dot =
+                (state.player.x - enemy.x) * enemy.snareDirX +
+                (state.player.y - enemy.y) * enemy.snareDirY;
+              const inRange = dot >= 0 && dot <= SNARE_RANGE;
+              const lineDistance = distancePointToSegment(enemy, chainEnd, state.player);
+
+              if (
+                !state.dash.active &&
+                inRange &&
+                lineDistance <= SNARE_CHAIN_WIDTH + PLAYER_SIZE / 2
+              ) {
+                state.snareUntil = Math.max(state.snareUntil, now + SNARE_SLOW_MS);
+                spawnParticles(state.player.x, state.player.y, SNARE_COLOR, 12);
+              }
+
+              enemy.snareState = "fire";
+              enemy.snareUntil = now + SNARE_FIRE_MS;
+            }
+          } else if (enemy.snareState === "fire") {
+            enemy.vx *= 0.7;
+            enemy.vy *= 0.7;
+            if (now >= enemy.snareUntil) {
+              enemy.snareState = "recover";
+              enemy.snareUntil = now + SNARE_RECOVER_MS;
+            }
+          } else {
+            enemy.vx *= 0.85;
+            enemy.vy *= 0.85;
+            if (now >= enemy.snareUntil) {
+              enemy.snareState = "seek";
+              enemy.snareUntil = now + SNARE_COOLDOWN_MS;
+            }
+          }
+        } else if (enemy.type === "rift") {
+          const toPlayerX = state.player.x - enemy.x;
+          const toPlayerY = state.player.y - enemy.y;
+          const baseAngle = Math.atan2(toPlayerY, toPlayerX);
+          const chaseStrength = 0.05;
+          const lateralStrength = 0.02 * enemy.flankSign;
+          const targetSpeed = enemy.speed;
+          const targetVx =
+            Math.cos(baseAngle) * targetSpeed +
+            Math.cos(baseAngle + Math.PI / 2) * targetSpeed * lateralStrength;
+          const targetVy =
+            Math.sin(baseAngle) * targetSpeed +
+            Math.sin(baseAngle + Math.PI / 2) * targetSpeed * lateralStrength;
+
+          enemy.vx = enemy.vx * (1 - chaseStrength) + targetVx * chaseStrength;
+          enemy.vy = enemy.vy * (1 - chaseStrength) + targetVy * chaseStrength;
+
+          if (now >= enemy.nextRiftAt) {
+            spawnRift(state, width, height);
+            enemy.nextRiftAt = now + RIFT_CAST_COOLDOWN_MS;
+          }
         } else {
-          if (now >= enemy.nextBurstAt) {
+          if (enemy.type !== "minion" && now >= enemy.nextBurstAt) {
             enemy.burstUntil = now + BURST_DURATION;
             const nextBurstBase = Math.max(800, BURST_COOLDOWN_BASE - state.stage * 50);
             enemy.nextBurstAt = now + nextBurstBase + state.rng() * BURST_COOLDOWN_VARIANCE;
           }
 
-          const chaseStrength = Math.min(0.06 + state.stage * 0.008, 0.22);
-          const lateralStrength = Math.min(0.02 + state.stage * 0.004, 0.08) * enemy.flankSign;
-          const burstMultiplier = now < enemy.burstUntil ? BURST_SPEED_MULT : 1;
+          const isMinion = enemy.type === "minion";
+          const chaseStrength = isMinion
+            ? 0.1
+            : Math.min(0.06 + state.stage * 0.008, 0.22);
+          const lateralStrength =
+            (isMinion ? 0.015 : Math.min(0.02 + state.stage * 0.004, 0.08)) *
+            enemy.flankSign;
+          const burstMultiplier = !isMinion && now < enemy.burstUntil ? BURST_SPEED_MULT : 1;
           const angle = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
           const targetSpeed = enemy.speed * burstMultiplier;
           const targetVx =
@@ -1222,6 +1573,47 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     }
     ctx.fillRect(0, 0, width, height);
 
+    if (state.markIntensity > 0) {
+      const ratio = state.markIntensity;
+      const alpha = MARK_BG_ALPHA_MIN + (MARK_BG_ALPHA_MAX - MARK_BG_ALPHA_MIN) * ratio;
+      const gradient = ctx.createRadialGradient(
+        width / 2,
+        height / 2,
+        Math.min(width, height) * 0.15,
+        width / 2,
+        height / 2,
+        Math.max(width, height) * 0.65
+      );
+      gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+      gradient.addColorStop(1, `rgba(${MARK_BG_TINT}, ${alpha})`);
+
+      ctx.save();
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.globalAlpha = MARK_BG_LINE_ALPHA * ratio;
+      ctx.strokeStyle = "rgba(120, 15, 15, 0.9)";
+      ctx.lineWidth = 1;
+      for (let y = -height; y < height * 2; y += 26) {
+        ctx.beginPath();
+        ctx.moveTo(-width, y);
+        ctx.lineTo(width * 2, y + 40);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      const bgImage = bgImageRef.current;
+      if (bgImage && bgImage.complete) {
+        const size = Math.min(width, height) * 0.72;
+        const x = width / 2 - size / 2;
+        const y = height / 2 - size / 2;
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.drawImage(bgImage, x, y, size, size);
+        ctx.restore();
+      }
+    }
+
     // Dash trail (afterimages)
     state.dash.trail.forEach((t) => {
       ctx.globalAlpha = t.life * 0.5;
@@ -1266,6 +1658,36 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
     });
     ctx.globalAlpha = 1.0;
+
+    // Rifts
+    state.rifts.forEach((rift) => {
+      if (!rift.active) return;
+      const isOpen = now >= rift.openAt;
+      const warningT = isOpen
+        ? 1
+        : 1 - Math.max(0, (rift.openAt - now) / RIFT_WARNING_MS);
+      const pulse = 0.6 + Math.sin(now / 140) * 0.4;
+      const radius = RIFT_RADIUS + 6 * pulse;
+
+      ctx.save();
+      ctx.translate(rift.x, rift.y);
+      ctx.globalAlpha = isOpen ? 0.75 : 0.45 * warningT;
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = RIFT_GLOW;
+      ctx.strokeStyle = RIFT_COLOR;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      if (isOpen) {
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = RIFT_COLOR;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    });
 
     // Enemies
     state.enemies.forEach((e) => {
@@ -1315,8 +1737,51 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
           ctx.stroke();
         }
         ctx.restore();
+      } else if (e.type === "rift") {
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = RIFT_GLOW;
+        ctx.fillStyle = RIFT_COLOR;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(10, 40, 70, 0.7)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+      } else if (e.type === "snare") {
+        if (e.snareState === "windup" || e.snareState === "fire") {
+          const chainEndX = e.x + e.snareDirX * SNARE_RANGE;
+          const chainEndY = e.y + e.snareDirY * SNARE_RANGE;
+          ctx.save();
+          ctx.globalAlpha = e.snareState === "fire" ? 0.8 : 0.55;
+          ctx.strokeStyle = "rgba(40, 212, 181, 0.95)";
+          ctx.lineWidth = e.snareState === "fire" ? 4 : 2;
+          ctx.beginPath();
+          ctx.moveTo(e.x, e.y);
+          ctx.lineTo(chainEndX, chainEndY);
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.save();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = SNARE_GLOW;
+        ctx.fillStyle = SNARE_COLOR;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0, 30, 25, 0.7)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
       } else {
-        ctx.fillStyle = e.type === "elite" ? "#ff7a18" : "#ff0000";
+        ctx.fillStyle =
+          e.type === "elite"
+            ? "#ff7a18"
+            : e.type === "minion"
+              ? "#ff5c5c"
+              : "#ff0000";
         ctx.beginPath();
         ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
         ctx.fill();
@@ -1357,7 +1822,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         height / 2,
         baseSize * scale,
         state.maskEffect.type,
-        emblemAlpha
+        emblemAlpha,
+        bgImageRef.current,
+        bgBrokenRef.current
       );
 
       const ringT = Math.min(elapsed / MASK_RING_DURATION, 1);
