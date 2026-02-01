@@ -105,7 +105,7 @@ const MASK_RING_MAX_RADIUS_RATIO = 0.6;
 const MASK_RING_ALPHA = 0.55;
 const ELITE_CONTACT_COOLDOWN = 650;
 const ELITE_KNOCKBACK_DISTANCE = 40;
-const PLAYER_INVULN_MS = 550;
+const PLAYER_INVULN_MS = 1000;
 const NO_KILL_LIMIT_BASE = 4000;
 const NO_KILL_LIMIT_MIN = 2200;
 const NO_KILL_LIMIT_DECAY = 120;
@@ -1441,6 +1441,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
           if (state.isMasked) {
             state.isMasked = false;
             state.shatteredKills = 0;
+            state.playerInvulnUntil = now + PLAYER_INVULN_MS;
             state.maskFlashUntil = Date.now() + MASK_FLASH_DURATION;
             state.maskFlashColor = "255, 80, 80";
             if (state.feverActive || state.feverMeter > 0) {
@@ -1456,7 +1457,6 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
               origin: { ...state.player },
             };
             if (enemy.type === "elite") {
-              state.playerInvulnUntil = now + PLAYER_INVULN_MS;
               enemy.contactCooldownUntil = now + ELITE_CONTACT_COOLDOWN;
               const dx = state.player.x - enemy.x;
               const dy = state.player.y - enemy.y;
