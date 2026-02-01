@@ -275,6 +275,7 @@ interface GameState {
   feverUntil: number;
   feverFlashUntil: number;
   feverFlashType: "in" | "out" | null;
+  lastUpdateAt: number;
   keys: { [key: string]: boolean };
   dash: DashState;
 }
@@ -620,6 +621,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       feverUntil: 0,
       feverFlashUntil: 0,
       feverFlashType: null,
+      lastUpdateAt: Date.now(),
       keys: {},
       dash: {
         active: false,
@@ -826,7 +828,14 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const clearKeys = () => {
+      const state = stateRef.current;
+      if (!state) return;
+      state.keys = {};
+    };
+
     const handleClick = (e: MouseEvent) => {
+      if (e.button !== 0) return;
       const state = stateRef.current;
       if (!state || state.gameOver) return;
       if (state.dash.active || state.dash.pending) return;
@@ -863,13 +872,32 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       state.keys[e.key.toLowerCase()] = false;
     };
 
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      clearKeys();
+    };
+
+    const handleBlur = () => {
+      clearKeys();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) clearKeys();
+    };
+
     canvas.addEventListener("mousedown", handleClick);
+    canvas.addEventListener("contextmenu", handleContextMenu);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       canvas.removeEventListener("mousedown", handleClick);
+      canvas.removeEventListener("contextmenu", handleContextMenu);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [onScoreUpdate]);
 
@@ -881,6 +909,12 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       if (!state || !canvas) return;
 
       const now = Date.now();
+      const lastUpdateAt = state.lastUpdateAt || now;
+      const frameDelta = Math.max(0, now - lastUpdateAt);
+      state.lastUpdateAt = now;
+      if (state.feverActive && state.waveComplete && frameDelta > 0) {
+        state.feverUntil += frameDelta;
+      }
       if (now < state.hitStopUntil) {
         draw(canvas, state);
         requestRef.current = requestAnimationFrame(update);
@@ -1794,6 +1828,39 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     });
 
     // Player
+    if (state.feverActive) {
+      const pulse = 0.6 + Math.sin(now / 120) * 0.4;
+      const glowRadius = PLAYER_SIZE * (1.8 + pulse * 0.4);
+      const innerGlow = ctx.createRadialGradient(
+        state.player.x,
+        state.player.y,
+        PLAYER_SIZE * 0.4,
+        state.player.x,
+        state.player.y,
+        glowRadius
+      );
+      innerGlow.addColorStop(0, "rgba(255, 220, 150, 0.45)");
+      innerGlow.addColorStop(1, "rgba(255, 200, 120, 0)");
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = innerGlow;
+      ctx.beginPath();
+      ctx.arc(state.player.x, state.player.y, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = 0.3 + pulse * 0.35;
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = "rgba(255, 200, 110, 0.9)";
+      ctx.strokeStyle = "rgba(255, 205, 120, 0.85)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(state.player.x, state.player.y, glowRadius * 0.65, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.strokeStyle = "#ffffff";
     ctx.fillStyle = "#ffffff";
     const halfSize = PLAYER_SIZE / 2;
@@ -1894,14 +1961,6 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       ctx.globalAlpha = 1.0;
     }
 
-    // Fever tint
-    if (state.feverActive) {
-      ctx.globalAlpha = FEVER_TINT_ALPHA;
-      ctx.fillStyle = "rgba(255, 180, 90, 0.35)";
-      ctx.fillRect(0, 0, width, height);
-      ctx.globalAlpha = 1.0;
-    }
-
     // Fever flash on enter/exit
     if (state.feverFlashUntil > now && state.feverFlashType) {
       const remaining = Math.max(state.feverFlashUntil - now, 0);
@@ -1982,6 +2041,46 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       ctx.fillStyle = state.announcement.color;
       ctx.fillText(text, x + paddingX, y + badgeHeight / 2);
       ctx.globalAlpha = 1.0;
+    }
+
+    if (state.feverActive) {
+      const remaining = Math.max(state.feverUntil - now, 0);
+      const ratio = Math.min(remaining / FEVER_DURATION_MS, 1);
+      const pulse = 0.5 + Math.sin(now / 140) * 0.5;
+      const margin = 22;
+      const badgeWidth = 150;
+      const badgeHeight = 24;
+      const x = margin;
+      const y = margin;
+
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = "rgba(12, 8, 0, 0.55)";
+      ctx.strokeStyle = "rgba(255, 215, 140, 0.55)";
+      ctx.lineWidth = 1;
+      drawRoundedRect(ctx, x, y, badgeWidth, badgeHeight, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = "700 12px 'Noto Sans SC', sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(255, 215, 140, 0.95)";
+      ctx.fillText("FEVER", x + 10, y + badgeHeight / 2);
+
+      const barX = x + 64;
+      const barY = y + badgeHeight / 2 - 4;
+      const barW = badgeWidth - 74;
+      const barH = 8;
+      ctx.fillStyle = "rgba(255, 215, 140, 0.2)";
+      drawRoundedRect(ctx, barX, barY, barW, barH, 4);
+      ctx.fill();
+
+      const fillW = Math.max(2, barW * ratio);
+      ctx.fillStyle = `rgba(255, 200, 90, ${0.65 + pulse * 0.2})`;
+      drawRoundedRect(ctx, barX, barY, fillW, barH, 4);
+      ctx.fill();
+      ctx.restore();
     }
 
     // Stage toast (subtle center stamp)
