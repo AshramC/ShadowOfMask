@@ -4,8 +4,21 @@ import seedrandom from "seedrandom";
 const PLAYER_SIZE = 20;
 const ENEMY_RADIUS = 10;
 const ELITE_ENEMY_RADIUS = 18;
+const ASSASSIN_RADIUS = 8;
 const ELITE_MAX_HP = 3;
 const ELITE_SPEED_MULT = 0.7;
+const ASSASSIN_SPEED_MULT = 1.0;
+const ASSASSIN_DASH_SPEED_MULT = 4.2;
+const ASSASSIN_WINDUP_MS = 160;
+const ASSASSIN_DASH_MS = 320;
+const ASSASSIN_RECOVER_MS = 360;
+const ASSASSIN_COOLDOWN_MS = 1100;
+const ASSASSIN_TRIGGER_RANGE = 320;
+const ASSASSIN_ALPHA_STEALTH = 0.65;
+const ASSASSIN_ALPHA_ACTIVE = 1.0;
+const ASSASSIN_COLOR = "#c252ff";
+const ASSASSIN_GLOW = "rgba(194, 82, 255, 0.9)";
+const ASSASSIN_OUTLINE = "rgba(30, 10, 60, 0.75)";
 const BASE_ENEMY_SPEED = 0.9;
 const SPEED_PER_STAGE = 0.07;
 const BURST_WAVE_DELAY = 600;
@@ -42,7 +55,15 @@ const KILL_IMPACT_FLASH_ALPHA = 0.22;
 const BASE_HIT_STOP_MS = 80;
 const SCREEN_SHAKE_DURATION = 120;
 const MASK_FLASH_DURATION = 220;
-const MASK_FLASH_ALPHA = 0.35;
+const MASK_FLASH_ALPHA = 0.55;
+const MASK_EMBLEM_BREAK_DURATION = 260;
+const MASK_EMBLEM_RESTORE_DURATION = 320;
+const MASK_EMBLEM_SIZE_RATIO = 0.7;
+const MASK_EMBLEM_ALPHA_BREAK = 0.75;
+const MASK_EMBLEM_ALPHA_RESTORE = 0.65;
+const MASK_RING_DURATION = 320;
+const MASK_RING_MAX_RADIUS_RATIO = 0.6;
+const MASK_RING_ALPHA = 0.55;
 const ELITE_CONTACT_COOLDOWN = 650;
 const ELITE_KNOCKBACK_DISTANCE = 40;
 const PLAYER_INVULN_MS = 550;
@@ -51,6 +72,16 @@ const NO_KILL_LIMIT_MIN = 2200;
 const NO_KILL_LIMIT_DECAY = 120;
 const NO_KILL_EXTRA_SPAWN_COUNT = 4;
 const NO_KILL_ESCALATE_THRESHOLD = 2;
+const FEVER_METER_MAX = 100;
+const FEVER_DURATION_MS = 6500;
+const FEVER_SPEED_MULT = 1.6;
+const FEVER_DASH_DELAY_MULT = 0.35;
+const FEVER_GAIN_NORMAL = 6;
+const FEVER_GAIN_ELITE = 12;
+const FEVER_GAIN_COMBO_BONUS = 0.2;
+const FEVER_TINT_ALPHA = 0.18;
+const FEVER_FLASH_DURATION = 280;
+const FEVER_FLASH_ALPHA = 0.45;
 const WAVE_TRANSITION_DELAY = 900;
 const STAGE_TOAST_FADE_IN = 150;
 const STAGE_TOAST_HOLD = 350;
@@ -75,7 +106,7 @@ interface Enemy extends Entity {
   radius: number;
   hp: number;
   maxHp: number;
-  type: "normal" | "elite";
+  type: "normal" | "elite" | "assassin";
   spawned: boolean;
   spawnAt: number;
   flankSign: number;
@@ -85,6 +116,10 @@ interface Enemy extends Entity {
   lastHitDashId: number;
   contactCooldownUntil: number;
   waveId: number;
+  assassinState: "approach" | "windup" | "dash" | "recover";
+  stateUntil: number;
+  dashDx: number;
+  dashDy: number;
 }
 
 interface Particle extends Entity {
@@ -145,6 +180,12 @@ interface StageToast {
   startedAt: number;
 }
 
+interface MaskEffect {
+  type: "break" | "restore";
+  startedAt: number;
+  origin: Point;
+}
+
 interface GameState {
   player: Point;
   playerName: string;
@@ -173,11 +214,17 @@ interface GameState {
   maskFlashColor: string;
   impactFlashUntil: number;
   impactFlashColor: string;
+  maskEffect: MaskEffect | null;
   rng: seedrandom.PRNG;
   hitStopUntil: number;
   comboCount: number;
   comboUntil: number;
   playerInvulnUntil: number;
+  feverMeter: number;
+  feverActive: boolean;
+  feverUntil: number;
+  feverFlashUntil: number;
+  feverFlashType: "in" | "out" | null;
   keys: { [key: string]: boolean };
   dash: DashState;
 }
@@ -186,7 +233,14 @@ interface GameCanvasProps {
   seed: string;
   playerName: string;
   onGameOver: (score: number, stage: number) => void;
-  onScoreUpdate: (score: number, isMasked: boolean, shatteredKills: number, stage: number) => void;
+  onScoreUpdate: (
+    score: number,
+    isMasked: boolean,
+    shatteredKills: number,
+    stage: number,
+    feverMeter: number,
+    feverActive: boolean
+  ) => void;
 }
 
 function dist(p1: Point, p2: Point): number {
@@ -238,6 +292,75 @@ function drawRoundedRect(
   ctx.closePath();
 }
 
+function drawMaskEmblem(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  type: "break" | "restore",
+  alpha: number
+) {
+  const half = size / 2;
+  const top = -half * 0.9;
+  const bottom = half * 0.95;
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  if (type === "break") {
+    const jitter = (1 - alpha / MASK_EMBLEM_ALPHA_BREAK) * 8;
+    ctx.translate((Math.random() - 0.5) * jitter, (Math.random() - 0.5) * jitter);
+  }
+
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = type === "break" ? "rgba(255, 120, 90, 0.9)" : "rgba(230, 235, 240, 0.9)";
+  ctx.lineWidth = 4;
+
+  ctx.beginPath();
+  ctx.moveTo(-half * 0.6, top);
+  ctx.quadraticCurveTo(0, top - half * 0.2, half * 0.6, top);
+  ctx.quadraticCurveTo(half * 0.85, 0, half * 0.55, bottom * 0.6);
+  ctx.lineTo(0, bottom);
+  ctx.lineTo(-half * 0.55, bottom * 0.6);
+  ctx.quadraticCurveTo(-half * 0.85, 0, -half * 0.6, top);
+  ctx.closePath();
+  ctx.stroke();
+
+  // Eye slits
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-half * 0.35, -half * 0.05);
+  ctx.lineTo(-half * 0.1, -half * 0.08);
+  ctx.moveTo(half * 0.35, -half * 0.05);
+  ctx.lineTo(half * 0.1, -half * 0.08);
+  ctx.stroke();
+
+  if (type === "break") {
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(255, 120, 90, 0.85)";
+    ctx.beginPath();
+    ctx.moveTo(-half * 0.1, top + half * 0.1);
+    ctx.lineTo(half * 0.1, bottom * 0.2);
+    ctx.moveTo(-half * 0.25, bottom * 0.1);
+    ctx.lineTo(half * 0.15, bottom * 0.5);
+    ctx.stroke();
+  } else {
+    ctx.globalAlpha = alpha * 0.35;
+    ctx.fillStyle = "rgba(230, 235, 240, 0.6)";
+    ctx.beginPath();
+    ctx.moveTo(-half * 0.6, top);
+    ctx.quadraticCurveTo(0, top - half * 0.2, half * 0.6, top);
+    ctx.quadraticCurveTo(half * 0.85, 0, half * 0.55, bottom * 0.6);
+    ctx.lineTo(0, bottom);
+    ctx.lineTo(-half * 0.55, bottom * 0.6);
+    ctx.quadraticCurveTo(-half * 0.85, 0, -half * 0.6, top);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+  ctx.globalAlpha = 1.0;
+}
+
 export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
@@ -251,6 +374,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     const baseCount = Math.round(4 + state.stage * 1.2);
     let normalCount = baseCount;
     let eliteCount = 0;
+    let assassinCount = 0;
 
     if (waveIndex === 2) {
       eliteCount = 1;
@@ -261,14 +385,21 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       normalCount = Math.max(2, Math.round(baseCount * 0.6));
     }
 
-    const totalCount = normalCount + eliteCount;
+    if (state.stage >= 4) {
+      assassinCount = Math.min(3, 1 + Math.floor((state.stage - 4) / 5));
+      if (waveIndex === 3 && assassinCount > 1) {
+        assassinCount = 1;
+      }
+    }
+
+    const totalCount = normalCount + eliteCount + assassinCount;
     state.enemiesInWave = totalCount;
     state.enemiesKilledInWave = 0;
     state.waveComplete = false;
 
     const baseSpeed = BASE_ENEMY_SPEED + state.stage * SPEED_PER_STAGE;
 
-    const spawnEnemy = (type: "normal" | "elite", delayMs: number) => {
+    const spawnEnemy = (type: "normal" | "elite" | "assassin", delayMs: number) => {
       let x, y;
       if (rng() > 0.5) {
         x = rng() > 0.5 ? -20 : w + 20;
@@ -279,8 +410,18 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       }
 
       const angle = Math.atan2(h / 2 - y, w / 2 - x) + (rng() - 0.5) * 0.5;
-      const speed = type === "elite" ? baseSpeed * ELITE_SPEED_MULT : baseSpeed;
-      const radius = type === "elite" ? ELITE_ENEMY_RADIUS : ENEMY_RADIUS;
+      const speed =
+        type === "elite"
+          ? baseSpeed * ELITE_SPEED_MULT
+          : type === "assassin"
+            ? baseSpeed * ASSASSIN_SPEED_MULT
+            : baseSpeed;
+      const radius =
+        type === "elite"
+          ? ELITE_ENEMY_RADIUS
+          : type === "assassin"
+            ? ASSASSIN_RADIUS
+            : ENEMY_RADIUS;
       const maxHp = type === "elite" ? ELITE_MAX_HP : 1;
       const spawned = delayMs === 0;
       const nextBurstBase = Math.max(900, BURST_COOLDOWN_BASE - state.stage * 60);
@@ -305,6 +446,10 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         lastHitDashId: -1,
         contactCooldownUntil: 0,
         waveId,
+        assassinState: "approach",
+        stateUntil: now + rng() * 400,
+        dashDx: 0,
+        dashDy: 0,
       });
     };
 
@@ -315,6 +460,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     }
     for (let i = 0; i < eliteCount; i++) {
       spawnEnemy("elite", 0);
+    }
+    for (let i = 0; i < assassinCount; i++) {
+      spawnEnemy("assassin", 0);
     }
 
     state.waveStartAt = now;
@@ -356,11 +504,17 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       maskFlashColor: "255, 255, 255",
       impactFlashUntil: 0,
       impactFlashColor: "255, 200, 140",
+      maskEffect: null,
       rng,
       hitStopUntil: 0,
       comboCount: 0,
       comboUntil: 0,
       playerInvulnUntil: 0,
+      feverMeter: 0,
+      feverActive: false,
+      feverUntil: 0,
+      feverFlashUntil: 0,
+      feverFlashType: null,
       keys: {},
       dash: {
         active: false,
@@ -442,6 +596,10 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         lastHitDashId: -1,
         contactCooldownUntil: 0,
         waveId: state.currentWaveId,
+        assassinState: "approach",
+        stateUntil: now + rng() * 400,
+        dashDx: 0,
+        dashDy: 0,
       });
     }
     state.enemiesInWave += count;
@@ -492,7 +650,8 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       const distance = Math.hypot(dx, dy);
       const maxDistance = Math.max(1, Math.hypot(canvas.width, canvas.height));
       const ratio = Math.min(distance / maxDistance, 1);
-      const pendingDelay = MIN_DASH_DELAY + (MAX_DASH_DELAY - MIN_DASH_DELAY) * ratio;
+      const baseDelay = MIN_DASH_DELAY + (MAX_DASH_DELAY - MIN_DASH_DELAY) * ratio;
+      const pendingDelay = baseDelay * (state.feverActive ? FEVER_DASH_DELAY_MULT : 1);
 
       state.dash.pending = true;
       state.dash.pendingStart = Date.now();
@@ -535,6 +694,22 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         draw(canvas, state);
         requestRef.current = requestAnimationFrame(update);
         return;
+      }
+
+      if (state.feverActive && now > state.feverUntil) {
+        state.feverActive = false;
+        state.feverMeter = 0;
+        state.feverUntil = 0;
+        state.feverFlashUntil = now + FEVER_FLASH_DURATION;
+        state.feverFlashType = "out";
+        onScoreUpdate(
+          state.score,
+          state.isMasked,
+          state.shatteredKills,
+          state.stage,
+          state.feverMeter,
+          state.feverActive
+        );
       }
 
       if (state.gameOver) {
@@ -592,7 +767,14 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
             }
           }, WAVE_TRANSITION_DELAY);
 
-          onScoreUpdate(state.score, state.isMasked, state.shatteredKills, state.stage);
+          onScoreUpdate(
+            state.score,
+            state.isMasked,
+            state.shatteredKills,
+            state.stage,
+            state.feverMeter,
+            state.feverActive
+          );
         } else if (noKillTimedOut) {
           if (state.noKillStrikes + 1 < NO_KILL_ESCALATE_THRESHOLD) {
             state.noKillStrikes += 1;
@@ -618,7 +800,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
               state.score,
               state.isMasked,
               state.shatteredKills,
-              state.stage
+              state.stage,
+              state.feverMeter,
+              state.feverActive
             );
           }
         }
@@ -632,6 +816,16 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
         }
       }
 
+      if (state.maskEffect) {
+        const duration =
+          state.maskEffect.type === "break"
+            ? MASK_EMBLEM_BREAK_DURATION
+            : MASK_EMBLEM_RESTORE_DURATION;
+        if (now - state.maskEffect.startedAt > duration) {
+          state.maskEffect = null;
+        }
+      }
+
       // WASD Movement
       let moveX = 0;
       let moveY = 0;
@@ -642,8 +836,9 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
 
       if (moveX !== 0 || moveY !== 0) {
         const len = Math.sqrt(moveX * moveX + moveY * moveY);
-        moveX = (moveX / len) * PLAYER_SPEED;
-        moveY = (moveY / len) * PLAYER_SPEED;
+        const speed = PLAYER_SPEED * (state.feverActive ? FEVER_SPEED_MULT : 1);
+        moveX = (moveX / len) * speed;
+        moveY = (moveY / len) * speed;
         state.player.x = Math.max(PLAYER_SIZE / 2, Math.min(width - PLAYER_SIZE / 2, state.player.x + moveX));
         state.player.y = Math.max(PLAYER_SIZE / 2, Math.min(height - PLAYER_SIZE / 2, state.player.y + moveY));
       }
@@ -682,6 +877,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
 
         // Check collision during dash movement
         let killCount = 0;
+        let feverGain = 0;
         state.enemies.forEach((enemy) => {
           if (!enemy.active) return;
           if (lineIntersectCircle(prevPos, state.player, enemy, enemy.radius + PLAYER_SIZE / 2)) {
@@ -700,6 +896,7 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
               state.enemiesKilledInWave++;
               state.lastKillAt = now;
               state.noKillStrikes = 0;
+              feverGain += enemy.type === "elite" ? FEVER_GAIN_ELITE : FEVER_GAIN_NORMAL;
               spawnParticles(enemy.x, enemy.y, "#ff0000", 15);
               const projectedCombo = Math.max(
                 state.comboCount + 1,
@@ -728,6 +925,21 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
           const comboLevel = getComboLevel(state.comboCount);
           state.shakeUntil = now + SCREEN_SHAKE_DURATION;
           state.shakeMagnitude = COMBO_SHAKE_MAGNITUDE[comboLevel];
+
+          if (state.isMasked && !state.feverActive) {
+            const comboBonus = 1 + comboLevel * FEVER_GAIN_COMBO_BONUS;
+            state.feverMeter = Math.min(
+              FEVER_METER_MAX,
+              state.feverMeter + feverGain * comboBonus
+            );
+            if (state.feverMeter >= FEVER_METER_MAX) {
+              state.feverActive = true;
+              state.feverUntil = now + FEVER_DURATION_MS;
+              state.feverMeter = FEVER_METER_MAX;
+              state.feverFlashUntil = now + FEVER_FLASH_DURATION;
+              state.feverFlashType = "in";
+            }
+          }
 
           if (comboLevel >= 3) {
             state.impactFlashUntil = now + KILL_IMPACT_FLASH_DURATION;
@@ -759,10 +971,22 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
               state.shatteredKills = 0;
               state.maskFlashUntil = Date.now() + MASK_FLASH_DURATION;
               state.maskFlashColor = "255, 255, 255";
+              state.maskEffect = {
+                type: "restore",
+                startedAt: now,
+                origin: { ...state.player },
+              };
               spawnParticles(state.player.x, state.player.y, "#ffffff", 20);
             }
           }
-          onScoreUpdate(state.score, state.isMasked, state.shatteredKills, state.stage);
+          onScoreUpdate(
+            state.score,
+            state.isMasked,
+            state.shatteredKills,
+            state.stage,
+            state.feverMeter,
+            state.feverActive
+          );
         }
 
         if (progress >= 1) {
@@ -782,26 +1006,79 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       state.enemies.forEach((enemy) => {
         if (!enemy.spawned || !enemy.active) return;
 
-        if (now >= enemy.nextBurstAt) {
-          enemy.burstUntil = now + BURST_DURATION;
-          const nextBurstBase = Math.max(800, BURST_COOLDOWN_BASE - state.stage * 50);
-          enemy.nextBurstAt = now + nextBurstBase + state.rng() * BURST_COOLDOWN_VARIANCE;
+        if (enemy.type === "assassin") {
+          const toPlayerX = state.player.x - enemy.x;
+          const toPlayerY = state.player.y - enemy.y;
+          const distance = Math.hypot(toPlayerX, toPlayerY);
+          const baseAngle = Math.atan2(toPlayerY, toPlayerX);
+          const chaseStrength = 0.08;
+          const lateralStrength = 0.04 * enemy.flankSign;
+
+          if (enemy.assassinState === "approach") {
+            const targetSpeed = enemy.speed;
+            const targetVx =
+              Math.cos(baseAngle) * targetSpeed +
+              Math.cos(baseAngle + Math.PI / 2) * targetSpeed * lateralStrength;
+            const targetVy =
+              Math.sin(baseAngle) * targetSpeed +
+              Math.sin(baseAngle + Math.PI / 2) * targetSpeed * lateralStrength;
+            enemy.vx = enemy.vx * (1 - chaseStrength) + targetVx * chaseStrength;
+            enemy.vy = enemy.vy * (1 - chaseStrength) + targetVy * chaseStrength;
+
+            if (distance < ASSASSIN_TRIGGER_RANGE && now >= enemy.stateUntil) {
+              enemy.assassinState = "windup";
+              enemy.stateUntil = now + ASSASSIN_WINDUP_MS;
+              const len = distance || 1;
+              enemy.dashDx = toPlayerX / len;
+              enemy.dashDy = toPlayerY / len;
+            }
+          } else if (enemy.assassinState === "windup") {
+            enemy.vx *= 0.5;
+            enemy.vy *= 0.5;
+            if (now >= enemy.stateUntil) {
+              const len = distance || 1;
+              enemy.dashDx = toPlayerX / len;
+              enemy.dashDy = toPlayerY / len;
+              enemy.assassinState = "dash";
+              enemy.stateUntil = now + ASSASSIN_DASH_MS;
+            }
+          } else if (enemy.assassinState === "dash") {
+            enemy.vx = enemy.dashDx * enemy.speed * ASSASSIN_DASH_SPEED_MULT;
+            enemy.vy = enemy.dashDy * enemy.speed * ASSASSIN_DASH_SPEED_MULT;
+            if (now >= enemy.stateUntil) {
+              enemy.assassinState = "recover";
+              enemy.stateUntil = now + ASSASSIN_RECOVER_MS;
+            }
+          } else {
+            enemy.vx *= 0.85;
+            enemy.vy *= 0.85;
+            if (now >= enemy.stateUntil) {
+              enemy.assassinState = "approach";
+              enemy.stateUntil = now + ASSASSIN_COOLDOWN_MS;
+            }
+          }
+        } else {
+          if (now >= enemy.nextBurstAt) {
+            enemy.burstUntil = now + BURST_DURATION;
+            const nextBurstBase = Math.max(800, BURST_COOLDOWN_BASE - state.stage * 50);
+            enemy.nextBurstAt = now + nextBurstBase + state.rng() * BURST_COOLDOWN_VARIANCE;
+          }
+
+          const chaseStrength = Math.min(0.06 + state.stage * 0.008, 0.22);
+          const lateralStrength = Math.min(0.02 + state.stage * 0.004, 0.08) * enemy.flankSign;
+          const burstMultiplier = now < enemy.burstUntil ? BURST_SPEED_MULT : 1;
+          const angle = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
+          const targetSpeed = enemy.speed * burstMultiplier;
+          const targetVx =
+            Math.cos(angle) * targetSpeed +
+            Math.cos(angle + Math.PI / 2) * targetSpeed * lateralStrength;
+          const targetVy =
+            Math.sin(angle) * targetSpeed +
+            Math.sin(angle + Math.PI / 2) * targetSpeed * lateralStrength;
+
+          enemy.vx = enemy.vx * (1 - chaseStrength) + targetVx * chaseStrength;
+          enemy.vy = enemy.vy * (1 - chaseStrength) + targetVy * chaseStrength;
         }
-
-        const chaseStrength = Math.min(0.06 + state.stage * 0.008, 0.22);
-        const lateralStrength = Math.min(0.02 + state.stage * 0.004, 0.08) * enemy.flankSign;
-        const burstMultiplier = now < enemy.burstUntil ? BURST_SPEED_MULT : 1;
-        const angle = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
-        const targetSpeed = enemy.speed * burstMultiplier;
-        const targetVx =
-          Math.cos(angle) * targetSpeed +
-          Math.cos(angle + Math.PI / 2) * targetSpeed * lateralStrength;
-        const targetVy =
-          Math.sin(angle) * targetSpeed +
-          Math.sin(angle + Math.PI / 2) * targetSpeed * lateralStrength;
-
-        enemy.vx = enemy.vx * (1 - chaseStrength) + targetVx * chaseStrength;
-        enemy.vy = enemy.vy * (1 - chaseStrength) + targetVy * chaseStrength;
 
         enemy.x += enemy.vx;
         enemy.y += enemy.vy;
@@ -815,6 +1092,18 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
             state.shatteredKills = 0;
             state.maskFlashUntil = Date.now() + MASK_FLASH_DURATION;
             state.maskFlashColor = "255, 80, 80";
+            if (state.feverActive || state.feverMeter > 0) {
+              state.feverActive = false;
+              state.feverMeter = 0;
+              state.feverUntil = 0;
+              state.feverFlashUntil = now + FEVER_FLASH_DURATION;
+              state.feverFlashType = "out";
+            }
+            state.maskEffect = {
+              type: "break",
+              startedAt: now,
+              origin: { ...state.player },
+            };
             if (enemy.type === "elite") {
               state.playerInvulnUntil = now + PLAYER_INVULN_MS;
               enemy.contactCooldownUntil = now + ELITE_CONTACT_COOLDOWN;
@@ -845,7 +1134,14 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
             }
             spawnParticles(state.player.x, state.player.y, "#ffffff", 15);
             state.hitStopUntil = Math.max(state.hitStopUntil, now + BASE_HIT_STOP_MS);
-            onScoreUpdate(state.score, state.isMasked, state.shatteredKills, state.stage);
+            onScoreUpdate(
+              state.score,
+              state.isMasked,
+              state.shatteredKills,
+              state.stage,
+              state.feverMeter,
+              state.feverActive
+            );
           } else {
             state.gameOver = true;
             onGameOver(state.score, state.stage);
@@ -974,14 +1270,61 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     // Enemies
     state.enemies.forEach((e) => {
       if (!e.active) return;
-      ctx.fillStyle = e.type === "elite" ? "#ff7a18" : "#ff0000";
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
-      ctx.fill();
-      if (e.type === "elite") {
-        ctx.strokeStyle = "#000000";
-        ctx.lineWidth = 2;
+      if (e.type === "assassin") {
+        const alpha =
+          e.assassinState === "approach"
+            ? ASSASSIN_ALPHA_STEALTH
+            : e.assassinState === "recover"
+              ? 0.7
+              : ASSASSIN_ALPHA_ACTIVE;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = ASSASSIN_GLOW;
+        ctx.translate(e.x, e.y);
+        ctx.fillStyle = ASSASSIN_COLOR;
+        ctx.strokeStyle = ASSASSIN_OUTLINE;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -e.radius);
+        ctx.lineTo(e.radius, 0);
+        ctx.lineTo(0, e.radius);
+        ctx.lineTo(-e.radius, 0);
+        ctx.closePath();
+        ctx.fill();
         ctx.stroke();
+
+        if (e.assassinState === "windup") {
+          ctx.globalAlpha = 0.7;
+          ctx.strokeStyle = "rgba(210, 160, 255, 0.95)";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(0, 0, e.radius + 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(e.dashDx * (e.radius + 16), e.dashDy * (e.radius + 16));
+          ctx.stroke();
+        } else if (e.assassinState === "dash") {
+          ctx.globalAlpha = 0.6;
+          ctx.strokeStyle = "rgba(180, 110, 255, 0.95)";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(-e.dashDx * (e.radius + 20), -e.dashDy * (e.radius + 20));
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else {
+        ctx.fillStyle = e.type === "elite" ? "#ff7a18" : "#ff0000";
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        if (e.type === "elite") {
+          ctx.strokeStyle = "#000000";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       }
     });
 
@@ -995,6 +1338,52 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
     } else {
       ctx.lineWidth = 2;
       ctx.strokeRect(state.player.x - halfSize, state.player.y - halfSize, PLAYER_SIZE, PLAYER_SIZE);
+    }
+
+    // Mask break/restore effects (emblem + ring)
+    if (state.maskEffect) {
+      const elapsed = now - state.maskEffect.startedAt;
+      const isBreak = state.maskEffect.type === "break";
+      const emblemDuration = isBreak
+        ? MASK_EMBLEM_BREAK_DURATION
+        : MASK_EMBLEM_RESTORE_DURATION;
+      const emblemT = Math.min(elapsed / emblemDuration, 1);
+      const emblemAlpha = (isBreak ? MASK_EMBLEM_ALPHA_BREAK : MASK_EMBLEM_ALPHA_RESTORE) * (1 - emblemT);
+      const baseSize = Math.min(width, height) * MASK_EMBLEM_SIZE_RATIO;
+      const scale = isBreak ? 1.2 - 0.2 * emblemT : 0.9 + 0.12 * emblemT;
+      drawMaskEmblem(
+        ctx,
+        width / 2,
+        height / 2,
+        baseSize * scale,
+        state.maskEffect.type,
+        emblemAlpha
+      );
+
+      const ringT = Math.min(elapsed / MASK_RING_DURATION, 1);
+      const ringRadius = Math.min(width, height) * MASK_RING_MAX_RADIUS_RATIO * ringT;
+      const ringAlpha = MASK_RING_ALPHA * (1 - ringT);
+      if (ringAlpha > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = ringAlpha;
+        ctx.strokeStyle = isBreak ? "rgba(255, 90, 70, 0.9)" : "rgba(230, 235, 240, 0.9)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(state.maskEffect.origin.x, state.maskEffect.origin.y, ringRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = ringAlpha * 0.6;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(
+          state.maskEffect.origin.x,
+          state.maskEffect.origin.y,
+          ringRadius * 0.55,
+          0,
+          Math.PI * 2
+        );
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     // Kill Texts on enemies
@@ -1032,6 +1421,39 @@ export function GameCanvas({ seed, playerName, onGameOver, onScoreUpdate }: Game
       );
       gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
       gradient.addColorStop(1, `rgba(${state.impactFlashColor}, 1)`);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Fever tint
+    if (state.feverActive) {
+      ctx.globalAlpha = FEVER_TINT_ALPHA;
+      ctx.fillStyle = "rgba(255, 180, 90, 0.35)";
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Fever flash on enter/exit
+    if (state.feverFlashUntil > now && state.feverFlashType) {
+      const remaining = Math.max(state.feverFlashUntil - now, 0);
+      const t = remaining / FEVER_FLASH_DURATION;
+      const alpha = FEVER_FLASH_ALPHA * t;
+      const gradient = ctx.createRadialGradient(
+        width / 2,
+        height / 2,
+        Math.min(width, height) * 0.15,
+        width / 2,
+        height / 2,
+        Math.max(width, height) * 0.8
+      );
+      const color =
+        state.feverFlashType === "in"
+          ? "rgba(255, 200, 120, 1)"
+          : "rgba(120, 140, 160, 1)";
+      gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+      gradient.addColorStop(1, color);
       ctx.globalAlpha = alpha;
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
