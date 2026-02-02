@@ -1,29 +1,29 @@
-﻿## CollisionManager.gd
-## 纰版挒绠＄悊鍣
-## 璐熻矗妫€娴嬬帺瀹朵笌鏁屼汉鐨勭鎾烇紙鍐插埡纰版挒鍜屾帴瑙︾鎾烇級
+## CollisionManager.gd
+## Collision Manager
+## Handles collision detection between player and enemies (dash and contact)
 
 extends Node
 class_name CollisionManager
 
 # ============================================================
-# 淇″彿
+# Signals
 # ============================================================
 
-## 鍐插埡鍑讳腑鏁屼汉
+## Dash hit enemy
 signal dash_hit_enemy(enemy: EnemyBase, player: Player, kills_this_dash: int)
 
-## 鐜╁鎺ヨЕ鏁屼汉锛堥潪鍐插埡锛
+## Player touched enemy (non-dash)
 signal player_touched_enemy(enemy: EnemyBase, player: Player)
 
 # ============================================================
-# 寮曠敤
+# References
 # ============================================================
 
 var player: Player
 var wave_manager: WaveManager
 
 # ============================================================
-# 鐢熷懡鍛ㄦ湡
+# Lifecycle
 # ============================================================
 
 func _physics_process(_delta: float) -> void:
@@ -36,19 +36,19 @@ func _physics_process(_delta: float) -> void:
 	_check_collisions()
 
 
-	# ============================================================
-	# 鍏叡鏂规硶
-	# ============================================================
+# ============================================================
+# Public Methods
+# ============================================================
 
-## 璁剧疆寮曠敤
+## Setup references
 func setup(p_player: Player, p_wave_manager: WaveManager) -> void:
 	player = p_player
 	wave_manager = p_wave_manager
 
 
-	# ============================================================
-	# 绉佹湁鏂规硶
-	# ============================================================
+# ============================================================
+# Private Methods
+# ============================================================
 
 func _check_collisions() -> void:
 	var player_pos := player.global_position
@@ -56,7 +56,7 @@ func _check_collisions() -> void:
 	var is_dashing := player.is_dashing()
 	var is_invuln := player.is_invulnerable()
 	
-	# 鑾峰彇涓婁竴甯т綅缃紙鐢ㄤ簬鍐插埡纰版挒锛
+	# Get previous frame position (for dash collision)
 	var prev_pos := player.get_previous_position()
 	var dash_id := player.get_dash_id()
 	
@@ -69,25 +69,21 @@ func _check_collisions() -> void:
 		var combined_radius := player_radius + enemy_radius
 		
 		if is_dashing:
-			# 鍐插埡纰版挒妫€娴嬶紙绾挎涓庡渾锛
+			# Dash collision detection (line vs circle)
 			if player.check_line_circle_collision(prev_pos, player_pos, enemy_pos, combined_radius):
-				# 妫€鏌ユ槸鍚﹀凡琚湰娆″啿鍒哄嚮涓
+				# Check if already hit by this dash
 				if not player.was_enemy_hit_this_dash(enemy.get_instance_id()):
 					player.mark_enemy_hit_this_dash(enemy.get_instance_id())
 					
-					# 閫犳垚浼ゅ
+					# Deal damage
 					var killed: bool = enemy.take_damage(1, dash_id)
 					
 					if killed:
 						player.notify_enemy_killed(enemy)
 					else:
 						player.notify_enemy_hit(enemy)
-					
-					# 鑾峰彇褰撳墠鍐插埡鍑绘潃鏁帮紙浠
-					# Player 鍐呴儴鐘舵€侊級
-					# 杩欓噷閫氳繃 enemy_killed 淇″彿浼犻€
-					else:
-			# 鏅€氭帴瑙︾鎾
+		else:
+			# Normal contact collision (non-dashing)
 			if not is_invuln:
 				var distance := player_pos.distance_to(enemy_pos)
 				if distance < combined_radius:

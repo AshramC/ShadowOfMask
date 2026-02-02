@@ -112,9 +112,9 @@ func _physics_process(delta: float) -> void:
 	var now := Time.get_ticks_msec()
 	
 	# 妫€鏌
-	hit stop
+	# Hit stop check
 	# (hit stop 鍦
-	ComboSystem 涓鐞嗭紝杩欓噷璺宠繃绉诲姩)
+	# ComboSystem 涓鐞嗭紝杩欓噷璺宠繃绉诲姩)
 	
 	# 鏇存柊杞ㄨ抗
 	_update_trail(delta)

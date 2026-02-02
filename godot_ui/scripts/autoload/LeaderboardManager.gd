@@ -140,7 +140,7 @@ func is_entry_match(entry: LeaderboardEntry, player_name: String, stage: int, sc
 func get_player_rank(player_name: String, stage: int, score: int) -> int:
 	for i in range(_cached_entries.size()):
 		if is_entry_match(_cached_entries[i], player_name, stage, score):
-		return i + 1  # Rank starts at 1
+			return i + 1  # Rank starts at 1
 	return -1
 
 

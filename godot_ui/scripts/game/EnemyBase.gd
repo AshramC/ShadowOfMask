@@ -80,11 +80,9 @@ var is_spawned: bool = false
 var spawn_at: int = 0
 
 ## 渚у悜绉诲姩鏍囪 (-1 鎴
-1)
 var flank_sign: int = 1
 
 ## 鎵€灞炴尝娆
-ID
 var wave_id: int = 0
 
 ## Burst 绐佽繘鐩稿叧

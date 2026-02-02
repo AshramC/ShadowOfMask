@@ -302,7 +302,7 @@ func _on_player_enemy_killed(enemy: EnemyBase, kills_this_dash: int) -> void:
 	var combo_level := combo_system.get_combo_level()
 	
 	# 娣诲姞鍒
-	Combo
+	# Add to Combo
 	combo_system.add_kills(1, enemy.global_position, kills_this_dash)
 	
 	# 鏇存柊 Combo 绛夌骇

@@ -201,7 +201,7 @@ func _on_leaderboard_updated(_entries: Array) -> void:
 		# ============================================================
 
 ## 鍒濆鍖
-UI
+## Initialize UI
 func _initialize_ui() -> void:
 	# 榛樿鏄剧ず涓昏彍鍗
 	if menu_card:

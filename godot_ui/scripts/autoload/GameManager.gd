@@ -54,7 +54,8 @@ signal leaderboard_refresh_requested()
 
 const DEFAULT_PLAYER_NAME := "鏃犲悕鍒哄"
 const FEVER_METER_MAX := 100.0
-const SHATTERED_KILLS_TO_RESTORE := 3  ## 闈㈠叿鐮寸鍚庢仮澶嶆墍闇€鍑绘潃鏁?
+const SHATTERED_KILLS_TO_RESTORE := 3
+const CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"  ## 闈㈠叿鐮寸鍚庢仮澶嶆墍闇€鍑绘潃鏁?
 # ============================================================
 # (comment removed due to encoding issues)
 # ============================================================
@@ -288,8 +289,7 @@ func add_fever(amount: float) -> void:
 		fever_meter = minf(fever_meter + amount, FEVER_METER_MAX)
 
 
-## (comment removed due to encoding issues)
-Fever
+## Activate Fever mode
 func activate_fever() -> void:
 	if is_masked and fever_meter >= FEVER_METER_MAX:
 		fever_active = true
