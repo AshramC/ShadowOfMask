@@ -1,4 +1,4 @@
-﻿## GameManager.gd
+## GameManager.gd
 ## (comment removed due to encoding issues)
 ## (comment removed due to encoding issues)
 ##
@@ -360,5 +360,3 @@ func randi() -> int:
 
 func randi_range(min_value: int, max_value: int) -> int:
 	return game_rng.randi_range(min_value, max_value)
-
-

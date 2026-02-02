@@ -12,7 +12,7 @@ enum SnareState {
 	SEEK,     ## 瀵绘壘鐩爣
 	WINDUP,   ## 钃勫姏
 	FIRE,     ## 閲婃斁閿侀摼
-	# RECOVER   ## 鎭㈠
+	RECOVER   ## Recovering   ## 鎭㈠
 }
 
 # ============================================================

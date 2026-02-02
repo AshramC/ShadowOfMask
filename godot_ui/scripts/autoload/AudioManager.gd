@@ -1,4 +1,4 @@
-﻿## AudioManager.gd
+## AudioManager.gd
 ## 闊抽绠＄悊鍣
 # (Autoload)
 ## 璐熻矗 BGM 鍜岄煶鏁堢殑鎾斁鎺у埗
@@ -158,7 +158,7 @@ func resume_bgm() -> void:
 ## 璁剧疆 BGM 闊抽噺 (dB)
 func set_bgm_volume(volume_db: float) -> void:
 	_bgm_volume = volume_db
-	if _bgm_player.playing and (_fade_tween == null or not _fade_tween.is_valid()):
+	if _bgm_player and _bgm_player.playing and (_fade_tween == null or not _fade_tween.is_valid()):
 		_bgm_player.volume_db = volume_db
 
 
@@ -432,5 +432,3 @@ func _on_fever_updated(_meter: float, is_active: bool) -> void:
 		play_fever_end()
 	
 	_last_fever_active = is_active
-
-

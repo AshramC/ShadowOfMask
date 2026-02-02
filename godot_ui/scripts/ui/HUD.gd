@@ -1,4 +1,4 @@
-﻿## HUD.gd
+## HUD.gd
 ## 娓告垙 HUD 鎺у埗鑴氭湰
 ## 璐熻矗鏄剧ず鍒嗘暟銆丼tage銆侀潰鍏风姸鎬併€丗ever 绛夋父鎴忔暟鎹
 ##
@@ -235,8 +235,8 @@ func _create_stage_toast() -> void:
 	_stage_toast_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_stage_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_stage_toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_stage_toast_label.theme_override_font_sizes["font_size"] = 32
-	_stage_toast_label.theme_override_colors["font_color"] = Color.WHITE
+	_stage_toast_label.add_theme_font_size_override("font_size", 32)
+	_stage_toast_label.add_theme_color_override("font_color", Color.WHITE)
 	_stage_toast_label.modulate.a = 0.0
 	_stage_toast_container.add_child(_stage_toast_label)
 
@@ -301,4 +301,3 @@ func _stop_fever_pulse() -> void:
 	
 	if fever_bar_fill:
 		fever_bar_fill.modulate.a = 1.0
-

@@ -1,4 +1,4 @@
-﻿## GameWorld.gd
+## GameWorld.gd
 ## 娓告垙涓栫晫绠＄悊鍣
 ## 鏁村悎 Player銆乄aveManager銆丆omboSystem銆丗everSystem銆丆ollisionManager
 ## 浠ュ強鎵€鏈夎瑙夋晥鏋滅粍浠?
@@ -522,4 +522,3 @@ func _restore_mask() -> void:
 func _game_over() -> void:
 	GameManager.trigger_game_over()
 	AudioManager.play_game_over()
-
