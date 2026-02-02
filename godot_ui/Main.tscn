@@ -1,0 +1,57 @@
+[gd_scene load_steps=6 format=3 uid="uid://main_shadow_mask"]
+
+[ext_resource type="Theme" path="res://godot_ui/Theme.tres" id="1_theme"]
+[ext_resource type="PackedScene" path="res://godot_ui/HUD.tscn" id="2_hud"]
+[ext_resource type="PackedScene" path="res://godot_ui/MenuOverlay.tscn" id="3_menu"]
+[ext_resource type="Script" path="res://godot_ui/scripts/ui/Main.gd" id="4_main_script"]
+[ext_resource type="PackedScene" path="res://godot_ui/DebugPanel.tscn" id="5_debug_panel"]
+
+; ============================================================
+; Main - 主场景
+; 整合游戏区域、HUD、菜单遮罩、调试面板
+; ============================================================
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_theme")
+script = ExtResource("4_main_script")
+
+; ============================================================
+; 游戏背景 (纯黑)
+; ============================================================
+[node name="GameBackground" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 1)
+
+; ============================================================
+; 游戏区域占位 (未来放 2D 游戏节点)
+; ============================================================
+[node name="GameArea" type="Node2D" parent="."]
+
+; ============================================================
+; HUD 层
+; ============================================================
+[node name="HUD" parent="." instance=ExtResource("2_hud")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
+; ============================================================
+; 菜单遮罩层
+; ============================================================
+[node name="MenuOverlay" parent="." instance=ExtResource("3_menu")]
+unique_name_in_owner = true
+layout_mode = 1
+
+; ============================================================
+; 调试面板 (按 F12 显示/隐藏)
+; ============================================================
+[node name="DebugPanel" parent="." instance=ExtResource("5_debug_panel")]

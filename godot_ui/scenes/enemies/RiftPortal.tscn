@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8mj5np2k7xqd"]
+
+[ext_resource type="Script" path="res://godot_ui/scripts/effects/RiftPortal.gd" id="1_rift"]
+
+[node name="RiftPortal" type="Node2D"]
+script = ExtResource("1_rift")

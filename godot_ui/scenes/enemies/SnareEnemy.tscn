@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3 uid="uid://d5kw2n8qj4mpx"]
+
+[ext_resource type="Script" path="res://godot_ui/scripts/game/enemies/SnareEnemy.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://godot_ui/scripts/effects/EnemyRenderer.gd" id="2_renderer"]
+
+[node name="SnareEnemy" type="CharacterBody2D" groups=["enemy"]]
+script = ExtResource("1_enemy")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+
+[node name="EnemyRenderer" type="Node2D" parent="."]
+script = ExtResource("2_renderer")

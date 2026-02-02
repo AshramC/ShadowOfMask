@@ -1,0 +1,341 @@
+[gd_scene load_steps=3 format=3 uid="uid://debug_panel_shadow_mask"]
+
+[ext_resource type="Script" path="res://godot_ui/scripts/ui/DebugPanel.gd" id="1_debug_script"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_debug_panel"]
+bg_color = Color(0.1, 0.1, 0.1, 0.95)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.3, 0.3, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+; ============================================================
+; DebugPanel - 调试面板 (按 F12 显示/隐藏)
+; ============================================================
+
+[node name="DebugPanel" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1_debug_script")
+
+[node name="Panel" type="PanelContainer" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -320.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 600.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_debug_panel")
+
+[node name="MarginContainer" type="MarginContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="Panel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+; ============================================================
+; 标题
+; ============================================================
+[node name="Title" type="Label" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+theme_override_font_sizes/font_size = 18
+text = "🔧 Debug Panel (F12)"
+horizontal_alignment = 1
+
+[node name="HSeparator1" type="HSeparator" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+
+; ============================================================
+; 状态显示区域
+; ============================================================
+[node name="StatusSection" type="VBoxContainer" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StatusTitle" type="Label" parent="Panel/MarginContainer/VBox/StatusSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "【游戏状态】"
+
+[node name="PhaseLabel" type="Label" parent="Panel/MarginContainer/VBox/StatusSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.9, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "Phase: MENU"
+
+[node name="StatusLabel" type="Label" parent="Panel/MarginContainer/VBox/StatusSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 0.8)
+theme_override_font_sizes/font_size = 12
+text = "Score: 0 | Stage: 1
+Masked: Yes | Shattered Kills: 0
+Fever: 0.0% | Active: No"
+
+[node name="HSeparator2" type="HSeparator" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+
+; ============================================================
+; 游戏流程控制
+; ============================================================
+[node name="FlowSection" type="VBoxContainer" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="FlowTitle" type="Label" parent="Panel/MarginContainer/VBox/FlowSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "【游戏流程】"
+
+[node name="FlowButtons" type="HBoxContainer" parent="Panel/MarginContainer/VBox/FlowSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="StartGameBtn" type="Button" parent="Panel/MarginContainer/VBox/FlowSection/FlowButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "开始游戏"
+
+[node name="GameOverBtn" type="Button" parent="Panel/MarginContainer/VBox/FlowSection/FlowButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "游戏结束"
+
+[node name="GoToMenuBtn" type="Button" parent="Panel/MarginContainer/VBox/FlowSection/FlowButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "返回菜单"
+
+[node name="HSeparator3" type="HSeparator" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+
+; ============================================================
+; 游戏状态控制
+; ============================================================
+[node name="StateSection" type="VBoxContainer" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StateTitle" type="Label" parent="Panel/MarginContainer/VBox/StateSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "【状态控制】F1-F6 快捷键"
+
+[node name="StateRow1" type="HBoxContainer" parent="Panel/MarginContainer/VBox/StateSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AddScoreBtn" type="Button" parent="Panel/MarginContainer/VBox/StateSection/StateRow1"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "+Score (F1)"
+
+[node name="AddStageBtn" type="Button" parent="Panel/MarginContainer/VBox/StateSection/StateRow1"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "+Stage (F2)"
+
+[node name="StateRow2" type="HBoxContainer" parent="Panel/MarginContainer/VBox/StateSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ShatterMaskBtn" type="Button" parent="Panel/MarginContainer/VBox/StateSection/StateRow2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "破碎面具 (F3)"
+
+[node name="AddShatteredKillBtn" type="Button" parent="Panel/MarginContainer/VBox/StateSection/StateRow2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "+重塑 (F4)"
+
+[node name="StateRow3" type="HBoxContainer" parent="Panel/MarginContainer/VBox/StateSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AddFeverBtn" type="Button" parent="Panel/MarginContainer/VBox/StateSection/StateRow3"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "+Fever (F5)"
+
+[node name="ActivateFeverBtn" type="Button" parent="Panel/MarginContainer/VBox/StateSection/StateRow3"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "激活 Fever"
+
+[node name="HSeparator4" type="HSeparator" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+
+; ============================================================
+; 音量控制
+; ============================================================
+[node name="VolumeSection" type="VBoxContainer" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="VolumeTitle" type="Label" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "【音量控制】"
+
+[node name="MasterVolumeLabel" type="Label" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "主音量"
+
+[node name="MasterVolumeSlider" type="HSlider" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="BGMVolumeLabel" type="Label" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "BGM 音量"
+
+[node name="BGMVolumeSlider" type="HSlider" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="SFXVolumeLabel" type="Label" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "音效音量"
+
+[node name="SFXVolumeSlider" type="HSlider" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="AudioButtons" type="HBoxContainer" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PlayBGMBtn" type="Button" parent="Panel/MarginContainer/VBox/VolumeSection/AudioButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "播放 BGM"
+
+[node name="StopBGMBtn" type="Button" parent="Panel/MarginContainer/VBox/VolumeSection/AudioButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "停止 BGM"
+
+[node name="SFXButtons" type="HBoxContainer" parent="Panel/MarginContainer/VBox/VolumeSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PlayKillSFXBtn" type="Button" parent="Panel/MarginContainer/VBox/VolumeSection/SFXButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "击杀音效"
+
+[node name="PlayDashSFXBtn" type="Button" parent="Panel/MarginContainer/VBox/VolumeSection/SFXButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "冲刺音效"
+
+[node name="HSeparator5" type="HSeparator" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+
+; ============================================================
+; 排行榜控制
+; ============================================================
+[node name="LeaderboardSection" type="VBoxContainer" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="LeaderboardTitle" type="Label" parent="Panel/MarginContainer/VBox/LeaderboardSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "【排行榜】"
+
+[node name="LeaderboardButtons" type="HBoxContainer" parent="Panel/MarginContainer/VBox/LeaderboardSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AddTestScoreBtn" type="Button" parent="Panel/MarginContainer/VBox/LeaderboardSection/LeaderboardButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "添加测试数据"
+
+[node name="ClearLeaderboardBtn" type="Button" parent="Panel/MarginContainer/VBox/LeaderboardSection/LeaderboardButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "清空排行榜"
+
+; ============================================================
+; 设置控制
+; ============================================================
+[node name="SettingsSection" type="VBoxContainer" parent="Panel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="SettingsTitle" type="Label" parent="Panel/MarginContainer/VBox/SettingsSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "【设置】"
+
+[node name="SettingsButtons" type="HBoxContainer" parent="Panel/MarginContainer/VBox/SettingsSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SaveSettingsBtn" type="Button" parent="Panel/MarginContainer/VBox/SettingsSection/SettingsButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "保存设置"
+
+[node name="ResetSettingsBtn" type="Button" parent="Panel/MarginContainer/VBox/SettingsSection/SettingsButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "重置设置"
+
+[node name="ToggleFullscreenBtn" type="Button" parent="Panel/MarginContainer/VBox/SettingsSection/SettingsButtons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "全屏切换"
+
+; ============================================================
+; 按钮信号连接
+; ============================================================
+[connection signal="pressed" from="Panel/MarginContainer/VBox/FlowSection/FlowButtons/StartGameBtn" to="." method="_on_start_game_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/FlowSection/FlowButtons/GameOverBtn" to="." method="_on_game_over_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/FlowSection/FlowButtons/GoToMenuBtn" to="." method="_on_go_to_menu_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/StateSection/StateRow1/AddScoreBtn" to="." method="_on_add_score_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/StateSection/StateRow1/AddStageBtn" to="." method="_on_advance_stage_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/StateSection/StateRow2/ShatterMaskBtn" to="." method="_on_shatter_mask_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/StateSection/StateRow2/AddShatteredKillBtn" to="." method="_on_add_shattered_kill_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/StateSection/StateRow3/AddFeverBtn" to="." method="_on_add_fever_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/StateSection/StateRow3/ActivateFeverBtn" to="." method="_on_activate_fever_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/VolumeSection/AudioButtons/PlayBGMBtn" to="." method="_on_play_bgm_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/VolumeSection/AudioButtons/StopBGMBtn" to="." method="_on_stop_bgm_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/VolumeSection/SFXButtons/PlayKillSFXBtn" to="." method="_on_play_kill_sfx_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/VolumeSection/SFXButtons/PlayDashSFXBtn" to="." method="_on_play_dash_sfx_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/LeaderboardSection/LeaderboardButtons/AddTestScoreBtn" to="." method="_on_add_test_score_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/LeaderboardSection/LeaderboardButtons/ClearLeaderboardBtn" to="." method="_on_clear_leaderboard_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/SettingsSection/SettingsButtons/SaveSettingsBtn" to="." method="_on_save_settings_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/SettingsSection/SettingsButtons/ResetSettingsBtn" to="." method="_on_reset_settings_pressed"]
+[connection signal="pressed" from="Panel/MarginContainer/VBox/SettingsSection/SettingsButtons/ToggleFullscreenBtn" to="." method="_on_toggle_fullscreen_pressed"]

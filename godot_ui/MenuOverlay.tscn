@@ -1,0 +1,688 @@
+[gd_scene load_steps=13 format=3 uid="uid://menu_overlay_shadow_mask"]
+
+[ext_resource type="Script" path="res://godot_ui/scripts/ui/MenuOverlay.gd" id="1_menu_overlay_script"]
+
+; ============================================================
+; Sub Resources - StyleBox 定义
+; ============================================================
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_menu_card"]
+bg_color = Color(0.09, 0.09, 0.09, 0.5)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.15, 0.15, 0.15, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gameover_card"]
+bg_color = Color(0.2, 0.05, 0.05, 0.2)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.35, 0.1, 0.1, 0.5)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_primary"]
+bg_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_primary_hover"]
+bg_color = Color(0.9, 0.9, 0.9, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_outline"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.3, 0.3, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_outline_hover"]
+bg_color = Color(0.15, 0.15, 0.15, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.3, 0.3, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_danger"]
+bg_color = Color(0.8, 0.2, 0.2, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_danger_hover"]
+bg_color = Color(0.7, 0.15, 0.15, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_input"]
+bg_color = Color(0, 0, 0, 0.5)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.3, 0.3, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_leaderboard_item"]
+bg_color = Color(0.09, 0.09, 0.09, 0.5)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_leaderboard_item_highlight"]
+bg_color = Color(0.25, 0.2, 0.05, 0.3)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.6, 0.5, 0.2, 0.5)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+; ============================================================
+; MenuOverlay - 主菜单和游戏结束遮罩
+; ============================================================
+
+[node name="MenuOverlay" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_menu_overlay_script")
+
+; ============================================================
+; 全屏半透明遮罩背景
+; ============================================================
+[node name="OverlayBg" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.8)
+
+; ============================================================
+; 内容居中容器
+; ============================================================
+[node name="CenterContent" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="ContentVBox" type="VBoxContainer" parent="CenterContent"]
+layout_mode = 2
+custom_minimum_size = Vector2(512, 0)
+theme_override_constants/separation = 0
+
+; ============================================================
+; 标题区域
+; ============================================================
+[node name="TitleSection" type="VBoxContainer" parent="CenterContent/ContentVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleMargin" type="MarginContainer" parent="CenterContent/ContentVBox/TitleSection"]
+layout_mode = 2
+theme_override_constants/margin_bottom = 48
+
+[node name="TitleVBox" type="VBoxContainer" parent="CenterContent/ContentVBox/TitleSection/TitleMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="MainTitle" type="Label" parent="CenterContent/ContentVBox/TitleSection/TitleMargin/TitleVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 56
+text = "影之面具"
+horizontal_alignment = 1
+
+[node name="SubTitle" type="Label" parent="CenterContent/ContentVBox/TitleSection/TitleMargin/TitleVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 14
+text = "MASK OF SHADOW"
+horizontal_alignment = 1
+
+; ============================================================
+; 主菜单卡片 (MENU 状态显示)
+; ============================================================
+[node name="MenuCard" type="PanelContainer" parent="CenterContent/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_menu_card")
+
+[node name="MenuMargin" type="MarginContainer" parent="CenterContent/ContentVBox/MenuCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="MenuVBox" type="VBoxContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+; 开始按钮
+[node name="StartButton" type="Button" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 56)
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_primary")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_primary_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_primary")
+text = "开始潜行"
+
+; 分隔线
+[node name="Divider" type="ColorRect" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 1)
+color = Color(1, 1, 1, 0.1)
+
+; 排行榜标题
+[node name="LeaderboardHeader" type="HBoxContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TrophyIcon" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardHeader"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 14
+text = "🏆"
+
+[node name="LeaderboardTitle" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardHeader"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 14
+text = "本地排行榜 (按局数排名)"
+
+; 排行榜滚动区域
+[node name="LeaderboardScroll" type="ScrollContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 200)
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="LeaderboardList" type="VBoxContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+; 排行榜条目模板 (10个预置 slot)
+[node name="LeaderboardItem1" type="PanelContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_leaderboard_item")
+
+[node name="ItemMargin1" type="MarginContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem1"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ItemHBox1" type="HBoxContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem1/ItemMargin1"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RankBadge1" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem1/ItemMargin1/ItemHBox1"]
+layout_mode = 2
+custom_minimum_size = Vector2(24, 24)
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 12
+text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerName1" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem1/ItemMargin1/ItemHBox1"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "无名刺客"
+
+[node name="StageValue1" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem1/ItemMargin1/ItemHBox1"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.8, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "Stage 1"
+
+[node name="KillsValue1" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem1/ItemMargin1/ItemHBox1"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "0 kills"
+
+; 条目 2-10 (复制结构)
+[node name="LeaderboardItem2" type="PanelContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList"]
+visible = false
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_leaderboard_item")
+
+[node name="ItemMargin2" type="MarginContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem2"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ItemHBox2" type="HBoxContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem2/ItemMargin2"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RankBadge2" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem2/ItemMargin2/ItemHBox2"]
+layout_mode = 2
+custom_minimum_size = Vector2(24, 24)
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 12
+text = "2"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerName2" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem2/ItemMargin2/ItemHBox2"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "---"
+
+[node name="StageValue2" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem2/ItemMargin2/ItemHBox2"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.8, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "Stage -"
+
+[node name="KillsValue2" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem2/ItemMargin2/ItemHBox2"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "- kills"
+
+[node name="LeaderboardItem3" type="PanelContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList"]
+visible = false
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_leaderboard_item")
+
+[node name="ItemMargin3" type="MarginContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem3"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ItemHBox3" type="HBoxContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem3/ItemMargin3"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RankBadge3" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem3/ItemMargin3/ItemHBox3"]
+layout_mode = 2
+custom_minimum_size = Vector2(24, 24)
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 12
+text = "3"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerName3" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem3/ItemMargin3/ItemHBox3"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "---"
+
+[node name="StageValue3" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem3/ItemMargin3/ItemHBox3"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.8, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "Stage -"
+
+[node name="KillsValue3" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem3/ItemMargin3/ItemHBox3"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "- kills"
+
+[node name="LeaderboardItem4" type="PanelContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList"]
+visible = false
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_leaderboard_item")
+
+[node name="ItemMargin4" type="MarginContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem4"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ItemHBox4" type="HBoxContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem4/ItemMargin4"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RankBadge4" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem4/ItemMargin4/ItemHBox4"]
+layout_mode = 2
+custom_minimum_size = Vector2(24, 24)
+theme_override_colors/font_color = Color(0.4, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 12
+text = "4"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerName4" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem4/ItemMargin4/ItemHBox4"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "---"
+
+[node name="StageValue4" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem4/ItemMargin4/ItemHBox4"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.8, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "Stage -"
+
+[node name="KillsValue4" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem4/ItemMargin4/ItemHBox4"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "- kills"
+
+[node name="LeaderboardItem5" type="PanelContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList"]
+visible = false
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_leaderboard_item")
+
+[node name="ItemMargin5" type="MarginContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem5"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ItemHBox5" type="HBoxContainer" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem5/ItemMargin5"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RankBadge5" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem5/ItemMargin5/ItemHBox5"]
+layout_mode = 2
+custom_minimum_size = Vector2(24, 24)
+theme_override_colors/font_color = Color(0.4, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 12
+text = "5"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerName5" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem5/ItemMargin5/ItemHBox5"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "---"
+
+[node name="StageValue5" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem5/ItemMargin5/ItemHBox5"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.8, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "Stage -"
+
+[node name="KillsValue5" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList/LeaderboardItem5/ItemMargin5/ItemHBox5"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "- kills"
+
+; 空列表占位文字
+[node name="EmptyText" type="Label" parent="CenterContent/ContentVBox/MenuCard/MenuMargin/MenuVBox/LeaderboardScroll/LeaderboardList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 12
+text = "暂无记录"
+
+; ============================================================
+; 游戏结束卡片 (GAMEOVER 状态显示)
+; ============================================================
+[node name="GameOverCard" type="PanelContainer" parent="CenterContent/ContentVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_gameover_card")
+
+[node name="GameOverMargin" type="MarginContainer" parent="CenterContent/ContentVBox/GameOverCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="GameOverVBox" type="VBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+; 任务失败标题
+[node name="FailTitle" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.3, 0.3, 1)
+theme_override_font_sizes/font_size = 28
+text = "任务失败"
+horizontal_alignment = 1
+
+; 最终分数区域
+[node name="FinalStats" type="HBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 32
+
+[node name="FinalStageBox" type="VBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/FinalStats"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="FinalStageValue" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/FinalStats/FinalStageBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 40
+text = "1"
+horizontal_alignment = 1
+
+[node name="FinalStageLabel" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/FinalStats/FinalStageBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 14
+text = "Stage"
+horizontal_alignment = 1
+
+[node name="FinalKillsBox" type="VBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/FinalStats"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="FinalKillsValue" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/FinalStats/FinalKillsBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 40
+text = "0"
+horizontal_alignment = 1
+
+[node name="FinalKillsLabel" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/FinalStats/FinalKillsBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 14
+text = "Kills"
+horizontal_alignment = 1
+
+; 结算排行榜
+[node name="GameOverLeaderboardHeader" type="HBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TrophyIcon2" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardHeader"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 14
+text = "🏆"
+
+[node name="LeaderboardTitle2" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardHeader"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 14
+text = "排行榜"
+
+[node name="GameOverLeaderboardScroll" type="ScrollContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 160)
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="GameOverLeaderboardList" type="VBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+; 结算排行榜条目 (复用同样结构)
+[node name="GOLeaderboardItem1" type="PanelContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardScroll/GameOverLeaderboardList"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_leaderboard_item")
+
+[node name="GOItemMargin1" type="MarginContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardScroll/GameOverLeaderboardList/GOLeaderboardItem1"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="GOItemHBox1" type="HBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardScroll/GameOverLeaderboardList/GOLeaderboardItem1/GOItemMargin1"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="GORankBadge1" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardScroll/GameOverLeaderboardList/GOLeaderboardItem1/GOItemMargin1/GOItemHBox1"]
+layout_mode = 2
+custom_minimum_size = Vector2(24, 24)
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 12
+text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="GOPlayerName1" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardScroll/GameOverLeaderboardList/GOLeaderboardItem1/GOItemMargin1/GOItemHBox1"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "无名刺客"
+
+[node name="GOStageValue1" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardScroll/GameOverLeaderboardList/GOLeaderboardItem1/GOItemMargin1/GOItemHBox1"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.8, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "Stage 1"
+
+[node name="GOKillsValue1" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/GameOverLeaderboardScroll/GameOverLeaderboardList/GOLeaderboardItem1/GOItemMargin1/GOItemHBox1"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "0 kills"
+
+; 玩家名称输入区域
+[node name="NameInputSection" type="VBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="NameLabel" type="Label" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/NameInputSection"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 12
+text = "玩家名称"
+
+[node name="NameInput" type="LineEdit" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/NameInputSection"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 44)
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_input")
+placeholder_text = "输入你的名字..."
+max_length = 20
+
+[node name="SaveButton" type="Button" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/NameInputSection"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 44)
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_primary")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_primary_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_primary")
+text = "保存成绩"
+
+; 底部按钮组
+[node name="ButtonRow" type="HBoxContainer" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="BackToMenuButton" type="Button" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/ButtonRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 48)
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_outline")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_outline_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_outline")
+text = "返回主菜单"
+
+[node name="RetryButton" type="Button" parent="CenterContent/ContentVBox/GameOverCard/GameOverMargin/GameOverVBox/ButtonRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 48)
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_danger")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_danger_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_danger")
+text = "再次尝试"

@@ -1,0 +1,45 @@
+[gd_scene load_steps=6 format=3 uid="uid://bk7x2mp9j4qnw"]
+
+[ext_resource type="Script" path="res://godot_ui/scripts/game/GameWorld.gd" id="1_world"]
+[ext_resource type="PackedScene" uid="uid://bvj8xk3qp2w4h" path="res://godot_ui/scenes/Player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://godot_ui/scripts/effects/ParticleEmitter.gd" id="3_particles"]
+[ext_resource type="Script" path="res://godot_ui/scripts/effects/DashIndicator.gd" id="4_indicator"]
+[ext_resource type="Script" path="res://godot_ui/scripts/effects/ComboAnnouncement.gd" id="5_combo"]
+
+[node name="GameWorld" type="Node2D"]
+script = ExtResource("1_world")
+player_scene = ExtResource("2_player")
+
+[node name="Background" type="ColorRect" parent="."]
+z_index = -10
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.08, 0.08, 0.12, 1)
+
+[node name="Enemies" type="Node2D" parent="."]
+
+[node name="Rifts" type="Node2D" parent="."]
+
+[node name="Effects" type="Node2D" parent="."]
+
+[node name="ParticleEmitter" type="Node2D" parent="Effects"]
+script = ExtResource("3_particles")
+
+[node name="DashIndicator" type="Node2D" parent="Effects"]
+script = ExtResource("4_indicator")
+
+[node name="UI" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="ComboAnnouncement" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("5_combo")

@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3 uid="uid://dkq2m8j6xp4wn"]
+
+[ext_resource type="Script" path="res://godot_ui/scripts/game/enemies/EliteEnemy.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://godot_ui/scripts/effects/EnemyRenderer.gd" id="2_renderer"]
+
+[node name="EliteEnemy" type="CharacterBody2D" groups=["enemy"]]
+script = ExtResource("1_enemy")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+
+[node name="EnemyRenderer" type="Node2D" parent="."]
+script = ExtResource("2_renderer")

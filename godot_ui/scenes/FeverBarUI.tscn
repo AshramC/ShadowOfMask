@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://d7mj5kp2n9xwq"]
+
+[ext_resource type="Script" path="res://godot_ui/scripts/effects/FeverBarUI.gd" id="1_fever"]
+
+[node name="FeverBarUI" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 200.0
+offset_bottom = 50.0
+mouse_filter = 2
+script = ExtResource("1_fever")
