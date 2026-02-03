@@ -39,6 +39,7 @@ var _dash_pending: bool = false
 var _dash_pending_start: int = 0
 var _dash_pending_target: Vector2 = Vector2.ZERO
 var _dash_pending_delay: float = GameConstants.MIN_DASH_DELAY
+var _dash_moved_this_frame: bool = false
 
 var _trail_points: Array[Dictionary] = []
 
@@ -57,6 +58,8 @@ func _ready() -> void:
 		var shape := RectangleShape2D.new()
 		shape.size = Vector2(player_size, player_size)
 		collision_shape.shape = shape
+	collision_layer = 0
+	collision_mask = 0
 
 	_prev_position = global_position
 
@@ -68,6 +71,8 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var now := Time.get_ticks_msec()
+	_prev_position = global_position
+	_dash_moved_this_frame = false
 
 	_update_trail(delta)
 
@@ -84,8 +89,6 @@ func _physics_process(delta: float) -> void:
 	else:
 
 		_process_movement(delta, now)
-
-	_prev_position = global_position
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -256,6 +259,7 @@ func _process_dash(now: int) -> void:
 	var progress := minf(float(elapsed) / GameConstants.DASH_DURATION, 1.0)
 
 	var new_pos := _dash_start_pos.lerp(_dash_end_pos, progress)
+	_dash_moved_this_frame = true
 
 	_trail_points.append({
 		"position": new_pos,
@@ -293,6 +297,9 @@ func check_line_circle_collision(line_start: Vector2, line_end: Vector2, circle_
 func get_previous_position() -> Vector2:
 	return _prev_position
 
+func did_dash_this_frame() -> bool:
+	return _dash_moved_this_frame
+
 func _on_game_started(_seed: String) -> void:
 	reset_state()
 
@@ -303,4 +310,3 @@ func _on_phase_changed(new_phase: GameManager.GamePhase) -> void:
 			_dash_pending = false
 			dash_pending_cancelled.emit()
 		_dash_active = false
-

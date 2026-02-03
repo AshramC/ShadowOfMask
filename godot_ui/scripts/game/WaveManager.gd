@@ -377,6 +377,7 @@ func _preload_scenes() -> void:
 		RiftPortalScene = load(base_path + "RiftPortal.tscn")
 
 func _on_game_started(_seed: String) -> void:
+	_clear_active_entities()
 
 	current_wave_id = 0
 	enemies_in_wave = 0
@@ -385,25 +386,24 @@ func _on_game_started(_seed: String) -> void:
 	no_kill_strikes = 0
 	current_wave_enemies.clear()
 
-	for rift in active_rifts:
-		if is_instance_valid(rift):
-			rift.queue_free()
-	active_rifts.clear()
-
 	start_wave()
 
 func _on_phase_changed(new_phase: GameManager.GamePhase) -> void:
 	if new_phase == GameManager.GamePhase.MENU:
-
-		for enemy in current_wave_enemies:
-			if is_instance_valid(enemy):
-				enemy.queue_free()
-		current_wave_enemies.clear()
-
-		for rift in active_rifts:
-			if is_instance_valid(rift):
-				rift.queue_free()
-		active_rifts.clear()
+		_clear_active_entities()
 
 func _on_enemy_died(enemy: EnemyBase) -> void:
 	on_enemy_killed(enemy)
+
+func _clear_active_entities() -> void:
+	if enemy_container:
+		for child in enemy_container.get_children():
+			if is_instance_valid(child):
+				child.queue_free()
+	current_wave_enemies.clear()
+
+	if rift_container:
+		for child in rift_container.get_children():
+			if is_instance_valid(child):
+				child.queue_free()
+	active_rifts.clear()

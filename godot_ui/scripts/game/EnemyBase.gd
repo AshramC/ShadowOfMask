@@ -55,10 +55,13 @@ var is_active: bool = true
 func _ready() -> void:
 
 	_setup_collision_shape()
+	collision_layer = 0
+	collision_mask = 0
 
 	hp = max_hp
 
-	base_speed = GameConstants.get_enemy_base_speed(GameManager.stage) * speed_multiplier
+	var tick_rate := float(Engine.physics_ticks_per_second)
+	base_speed = GameConstants.get_enemy_base_speed(GameManager.stage) * speed_multiplier * tick_rate
 	current_speed = base_speed
 
 	flank_sign = 1 if GameManager.randf() > 0.5 else -1
@@ -66,9 +69,6 @@ func _ready() -> void:
 	_init_burst_timer()
 
 func _physics_process(delta: float) -> void:
-	if not is_active:
-		return
-
 	if GameManager.current_phase != GameManager.GamePhase.PLAYING:
 		return
 
@@ -81,6 +81,8 @@ func _physics_process(delta: float) -> void:
 			spawned.emit()
 		else:
 			return
+	elif not is_active:
+		return
 
 	_update_ai(delta, now)
 

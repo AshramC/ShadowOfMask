@@ -128,6 +128,8 @@ func _spawn_player() -> void:
 	add_child(player)
 
 	collision_manager.setup(player, wave_manager)
+	if collision_manager:
+		move_child(collision_manager, get_child_count() - 1)
 
 	player.dash_started.connect(_on_player_dash_started)
 	player.dash_ended.connect(_on_player_dash_ended)

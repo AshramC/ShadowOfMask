@@ -8,6 +8,8 @@ class_name ScreenEffects
 @onready var vignette_overlay: ColorRect = $VignetteOverlay
 @onready var fever_tint: ColorRect = $FeverTint
 @onready var mark_overlay: ColorRect = get_node_or_null("MarkOverlay")
+@onready var mask_bg: TextureRect = get_node_or_null("MaskBG")
+@onready var mask_emblem: TextureRect = get_node_or_null("MaskEmblem")
 
 var _shake_until: int = 0
 var _shake_magnitude: float = 0.0
@@ -28,6 +30,17 @@ var _fever_tint_current: float = 0.0
 
 var _mark_intensity: float = 0.0
 
+var _mask_texture: Texture2D
+var _mask_broken_texture: Texture2D
+var _mask_emblem_until: int = 0
+var _mask_emblem_duration: int = 0
+var _mask_emblem_type: String = ""
+
+const MASK_BG_PATH := "res://godot_ui/assets/BG.png"
+const MASK_BROKEN_PATH := "res://godot_ui/assets/BG_BROKEN.png"
+const MASK_BG_FALLBACK := "res://client/src/BG.png"
+const MASK_BROKEN_FALLBACK := "res://client/src/BG_BROKEN.png"
+
 func _ready() -> void:
 
 	_ensure_nodes()
@@ -40,6 +53,8 @@ func _ready() -> void:
 		fever_tint.color = Color(1, 0.85, 0.5, 0)
 	if mark_overlay:
 		mark_overlay.color = Color(GameConstants.MARK_BG_TINT.r, GameConstants.MARK_BG_TINT.g, GameConstants.MARK_BG_TINT.b, 0)
+
+	_load_mask_textures()
 
 	GameManager.fever_updated.connect(_on_fever_updated)
 
@@ -55,6 +70,7 @@ func _process(delta: float) -> void:
 	_update_fever_tint(delta)
 
 	_update_mark_background()
+	_update_mask_emblem(now)
 
 func shake(magnitude: float, duration_ms: int) -> void:
 	var now := Time.get_ticks_msec()
@@ -75,9 +91,11 @@ func flash(color: Color, max_alpha: float, duration_ms: int) -> void:
 
 func flash_mask_break() -> void:
 	flash(Color(1, 0.31, 0.31), GameConstants.MASK_FLASH_ALPHA, GameConstants.MASK_FLASH_DURATION)
+	_start_mask_emblem("break")
 
 func flash_mask_restore() -> void:
 	flash(Color.WHITE, GameConstants.MASK_FLASH_ALPHA, GameConstants.MASK_FLASH_DURATION)
+	_start_mask_emblem("restore")
 
 func flash_kill_impact(combo_level: int) -> void:
 	var color := Color(1.0, 0.47, 0.35) if combo_level >= 5 else Color(1.0, 0.78, 0.55)
@@ -143,6 +161,27 @@ func _ensure_nodes() -> void:
 			if flash_index >= 0:
 				move_child(mark_overlay, flash_index)
 
+	if not has_node("MaskBG"):
+		mask_bg = TextureRect.new()
+		mask_bg.name = "MaskBG"
+		mask_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mask_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		mask_bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		mask_bg.modulate = Color(1, 1, 1, 0)
+		mask_bg.z_index = -20
+		add_child(mask_bg)
+
+	if not has_node("MaskEmblem"):
+		mask_emblem = TextureRect.new()
+		mask_emblem.name = "MaskEmblem"
+		mask_emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mask_emblem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		mask_emblem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		mask_emblem.modulate = Color(1, 1, 1, 0)
+		mask_emblem.visible = false
+		mask_emblem.z_index = 5
+		add_child(mask_emblem)
+
 func _update_shake(now: int) -> void:
 	if not shake_container:
 		return
@@ -197,10 +236,75 @@ func _update_mark_background() -> void:
 
 	if _mark_intensity <= 0.0:
 		mark_overlay.color.a = 0.0
+		if mask_bg:
+			mask_bg.modulate.a = 0.0
 		return
 
 	var alpha := lerpf(GameConstants.MARK_BG_ALPHA_MIN, GameConstants.MARK_BG_ALPHA_MAX, _mark_intensity)
 	mark_overlay.color = Color(GameConstants.MARK_BG_TINT.r, GameConstants.MARK_BG_TINT.g, GameConstants.MARK_BG_TINT.b, alpha)
+	_update_mask_layout()
+
+	if mask_bg:
+		mask_bg.modulate = Color(1, 1, 1, alpha * 0.7)
 
 func _on_fever_updated(meter: float, active: bool) -> void:
 	_fever_tint_target = GameConstants.FEVER_TINT_ALPHA if active else 0.0
+
+func _load_mask_textures() -> void:
+	_mask_texture = _load_texture_with_fallback(MASK_BG_PATH, MASK_BG_FALLBACK)
+	_mask_broken_texture = _load_texture_with_fallback(MASK_BROKEN_PATH, MASK_BROKEN_FALLBACK)
+
+	if mask_bg and _mask_texture:
+		mask_bg.texture = _mask_texture
+
+func _load_texture_with_fallback(primary: String, fallback: String) -> Texture2D:
+	if ResourceLoader.exists(primary):
+		return load(primary) as Texture2D
+	if ResourceLoader.exists(fallback):
+		return load(fallback) as Texture2D
+	return null
+
+func _update_mask_layout() -> void:
+	var viewport_rect := get_viewport().get_visible_rect()
+	var size := minf(viewport_rect.size.x, viewport_rect.size.y) * GameConstants.MASK_EMBLEM_SIZE_RATIO
+	var pos := (viewport_rect.size - Vector2(size, size)) * 0.5
+
+	if mask_bg:
+		mask_bg.size = Vector2(size, size)
+		mask_bg.position = pos
+
+	if mask_emblem and mask_emblem.visible:
+		mask_emblem.position = pos
+
+func _start_mask_emblem(kind: String) -> void:
+	_mask_emblem_type = kind
+	_mask_emblem_duration = GameConstants.MASK_EMBLEM_BREAK_DURATION if kind == "break" else GameConstants.MASK_EMBLEM_RESTORE_DURATION
+	_mask_emblem_until = Time.get_ticks_msec() + _mask_emblem_duration
+
+	if mask_emblem:
+		mask_emblem.texture = _mask_broken_texture if kind == "break" else _mask_texture
+		mask_emblem.visible = true
+		_update_mask_layout()
+
+func _update_mask_emblem(now: int) -> void:
+	if not mask_emblem or _mask_emblem_duration <= 0:
+		return
+
+	if now >= _mask_emblem_until:
+		mask_emblem.visible = false
+		mask_emblem.modulate.a = 0.0
+		return
+
+	var elapsed := float(_mask_emblem_until - now)
+	var t := 1.0 - (elapsed / float(_mask_emblem_duration))
+	var max_alpha := GameConstants.MASK_EMBLEM_ALPHA_BREAK if _mask_emblem_type == "break" else GameConstants.MASK_EMBLEM_ALPHA_RESTORE
+	var alpha := max_alpha * (1.0 - t)
+	var base_size := minf(get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y) * GameConstants.MASK_EMBLEM_SIZE_RATIO
+	var start_scale := 1.2 if _mask_emblem_type == "break" else 0.9
+	var end_scale := 1.0
+	var size := base_size * lerpf(start_scale, end_scale, t)
+	var pos := (get_viewport().get_visible_rect().size - Vector2(size, size)) * 0.5
+
+	mask_emblem.size = Vector2(size, size)
+	mask_emblem.position = pos
+	mask_emblem.modulate = Color(1, 1, 1, alpha)

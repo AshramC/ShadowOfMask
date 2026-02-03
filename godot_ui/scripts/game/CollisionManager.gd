@@ -25,6 +25,7 @@ func _check_collisions() -> void:
 	var player_pos := player.global_position
 	var player_radius := player.get_collision_radius()
 	var is_dashing := player.is_dashing()
+	var did_dash := player.did_dash_this_frame() if player.has_method("did_dash_this_frame") else false
 	var is_invuln := player.is_invulnerable()
 
 	var prev_pos := player.get_previous_position()
@@ -38,10 +39,10 @@ func _check_collisions() -> void:
 		var enemy_radius: float = enemy.radius
 		var combined_radius := player_radius + enemy_radius
 
-		if is_dashing:
-
+		var dash_hit := false
+		if is_dashing or did_dash:
 			if player.check_line_circle_collision(prev_pos, player_pos, enemy_pos, combined_radius):
-
+				dash_hit = true
 				if not player.was_enemy_hit_this_dash(enemy.get_instance_id()):
 					player.mark_enemy_hit_this_dash(enemy.get_instance_id())
 
@@ -51,10 +52,12 @@ func _check_collisions() -> void:
 						player.notify_enemy_killed(enemy)
 					else:
 						player.notify_enemy_hit(enemy)
-		else:
 
+		if dash_hit:
+			continue
+
+		var distance := player_pos.distance_to(enemy_pos)
+		if distance < combined_radius:
 			if not is_invuln:
-				var distance := player_pos.distance_to(enemy_pos)
-				if distance < combined_radius:
-					if enemy.can_contact_player():
-						player_touched_enemy.emit(enemy, player)
+				if enemy.can_contact_player():
+					player_touched_enemy.emit(enemy, player)

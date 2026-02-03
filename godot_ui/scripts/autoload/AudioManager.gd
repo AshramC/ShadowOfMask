@@ -1,6 +1,7 @@
 extends Node
 
 const AUDIO_PATH := "res://assets/audio/"
+const FALLBACK_AUDIO_PATH := "res://"
 
 const BGM_FILE := "BGM.mp3"
 
@@ -193,7 +194,7 @@ func play_game_over() -> void:
 	play_sfx("game_over")
 
 func _load_bgm() -> void:
-	var bgm_path := AUDIO_PATH + BGM_FILE
+	var bgm_path := _resolve_audio_path(BGM_FILE)
 
 	if not ResourceLoader.exists(bgm_path):
 		push_warning("[AudioManager] BGM file not found: %s" % bgm_path)
@@ -214,7 +215,7 @@ func _load_bgm() -> void:
 
 func _preload_sfx() -> void:
 	for sfx_name in SFX_FILES:
-		var sfx_path: String = AUDIO_PATH + String(SFX_FILES[sfx_name])
+		var sfx_path: String = _resolve_audio_path(String(SFX_FILES[sfx_name]))
 
 		if ResourceLoader.exists(sfx_path):
 			var stream = load(sfx_path)
@@ -236,7 +237,7 @@ func _get_sfx_stream(sfx_name: String) -> AudioStream:
 		push_warning("[AudioManager] Unknown SFX: %s" % sfx_name)
 		return null
 
-	var sfx_path: String = AUDIO_PATH + String(SFX_FILES[sfx_name])
+	var sfx_path: String = _resolve_audio_path(String(SFX_FILES[sfx_name]))
 	if not ResourceLoader.exists(sfx_path):
 		return null
 
@@ -281,6 +282,12 @@ func _on_game_over(_final_score: int, _final_stage: int) -> void:
 func _on_mask_state_changed(is_masked: bool, _shattered_kills: int) -> void:
 
 	pass
+
+func _resolve_audio_path(filename: String) -> String:
+	var primary := AUDIO_PATH + filename
+	if ResourceLoader.exists(primary):
+		return primary
+	return FALLBACK_AUDIO_PATH + filename
 
 var _last_fever_active: bool = false
 

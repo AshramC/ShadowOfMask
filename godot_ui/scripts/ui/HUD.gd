@@ -96,7 +96,7 @@ func _update_mask_state(is_masked: bool, shattered_kills: int) -> void:
 
 	if is_masked:
 
-		mask_status.text = "闈㈠叿瀹屾暣"
+		mask_status.text = "面具完整"
 		mask_status.modulate = COLOR_MASK_INTACT
 
 		if shattered_kills_label:
@@ -106,12 +106,12 @@ func _update_mask_state(is_masked: bool, shattered_kills: int) -> void:
 			fever_label.visible = true
 	else:
 
-		mask_status.text = "闈㈠叿鐮寸"
+		mask_status.text = "面具破碎"
 		mask_status.modulate = COLOR_MASK_BROKEN
 
 		if shattered_kills_label:
 			shattered_kills_label.visible = true
-			shattered_kills_label.text = "閲嶅鎵€闇€: %d/3" % shattered_kills
+			shattered_kills_label.text = "重塑所需: %d/3" % shattered_kills
 
 		if fever_label:
 			fever_label.visible = false

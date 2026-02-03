@@ -100,6 +100,7 @@ var current_seed: String = ""
 
 func _ready() -> void:
 
+	_ensure_input_map()
 	_reset_to_menu_state()
 	print("[GameManager] Initialized")
 
@@ -220,6 +221,21 @@ func _reset_to_menu_state() -> void:
 func _init_game_rng(seed_value: String) -> void:
 	var hashed := _hash_seed(seed_value)
 	game_rng.seed = hashed
+
+func _ensure_input_map() -> void:
+	_ensure_action("move_up", [KEY_W, KEY_UP])
+	_ensure_action("move_down", [KEY_S, KEY_DOWN])
+	_ensure_action("move_left", [KEY_A, KEY_LEFT])
+	_ensure_action("move_right", [KEY_D, KEY_RIGHT])
+
+func _ensure_action(action: String, keys: Array[int]) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+
+	for key in keys:
+		var event := InputEventKey.new()
+		event.keycode = key
+		InputMap.action_add_event(action, event)
 
 func _generate_random_string(length: int) -> String:
 	var result := ""
